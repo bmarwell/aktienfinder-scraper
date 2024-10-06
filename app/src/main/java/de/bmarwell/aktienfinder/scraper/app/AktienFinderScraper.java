@@ -22,7 +22,7 @@ import picocli.CommandLine;
         name = "aktienfinder-scraper",
         mixinStandardHelpOptions = true,
         description = "Scrapes Aktienfinder-Scraper.",
-        subcommands = {ListCommand.class, ScrapeCommand.class})
+        subcommands = {DownloadCommand.class, ScrapeCommand.class, CommandLine.HelpCommand.class})
 public class AktienFinderScraper implements Callable<Integer> {
 
     public static void main(String[] args) {

@@ -13,16 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.app;
+package de.bmarwell.aktienfinder.scraper.library;
 
-import java.util.concurrent.Callable;
+import java.util.List;
 
-public class ListCommand implements Callable<Integer> {
+public interface StockIndexStockRetriever {
 
-    @Override
-    public Integer call() throws Exception {
-        // TODO: implement
-        throw new UnsupportedOperationException(
-                "not yet implemented: [de.bmarwell.aktienfinder.scraper.app.AktienFinderList::call].");
-    }
+    String getName();
+
+    List<Stock> getStocks();
 }

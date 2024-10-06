@@ -15,32 +15,16 @@
  */
 package de.bmarwell.aktienfinder.scraper.app;
 
-import de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
-import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
-@Command(name = "scrape", header = "Scrapes stocks from aktienfinder.net")
-public class ScrapeCommand implements Callable<Integer> {
-
-    @Option(
-            names = {"-i", "--stocks"},
-            description = "stock isins",
-            split = ",")
-    Set<String> stockIsins;
+@Command(name = "download", header = "Downloads a list of stocks")
+public class DownloadCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        final var scrapeService = new ScrapeService();
-
-        List<AktienfinderStock> ratings = scrapeService.scrapeAll(stockIsins);
-
-        System.out.println(ratings);
         // TODO: implement
         throw new UnsupportedOperationException(
-                "not yet implemented: [de.bmarwell.aktienfinder.scraper.app.Scrape::call].");
+                "not yet implemented: [de.bmarwell.aktienfinder.scraper.app.AktienFinderList::call].");
     }
 }

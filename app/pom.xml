@@ -14,6 +14,11 @@
     <artifactId>aktienfinder-scaper-app</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 
+    <properties>
+        <app.mainModule>de.bmarwell.aktienfinder.scraper.app</app.mainModule>
+        <app.mainClass>de.bmarwell.aktienfinder.scraper.app.AktienFinderScraper</app.mainClass>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>de.bmarwell.aktienfinder.scraper</groupId>
@@ -25,6 +30,114 @@
             <groupId>info.picocli</groupId>
             <artifactId>picocli</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
+
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>info.picocli</groupId>
+                            <artifactId>picocli-codegen</artifactId>
+                            <version>${dependency.picocli.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <compilerArgs>
+                        <arg>-Aproject=${project.groupId}/${project.artifactId}</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-runtime-deps</id>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputDirectory>${project.build.directory}/dependencies</outputDirectory>
+                            <prependGroupId>true</prependGroupId>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jreleaser</groupId>
+                <artifactId>jreleaser-maven-plugin</artifactId>
+                <inherited>false</inherited>
+                <configuration>
+                    <jreleaser>
+                        <release>
+                            <github>
+                                <skipRelease>true</skipRelease>
+                                <enabled>true</enabled>
+                                <owner>bmarwell</owner>
+                                <name>aktienfinder-scraper</name>
+                                <host>github.com</host>
+                            </github>
+                        </release>
+                        <assemble>
+                            <javaArchive>
+                                <aktienfinder-scraper>
+                                    <active>ALWAYS</active>
+                                    <formats>
+                                        <format>ZIP</format>
+                                    </formats>
+                                    <options>
+                                        <longFileMode>POSIX</longFileMode>
+                                        <bigNumberMode>POSIX</bigNumberMode>
+                                    </options>
+                                    <mainJar>
+                                        <path>${project.build.directory}/${project.build.finalName}.jar</path>
+                                    </mainJar>
+                                    <java>
+                                        <mainModule>${app.mainModule}</mainModule>
+                                        <mainClass>${app.mainClass}</mainClass>
+                                        <options>
+                                            -Xms64m -Xmx128m
+                                        </options>
+                                    </java>
+                                    <fileSets>
+                                        <fileSet>
+                                            <input>${project.build.directory}/dependencies</input>
+                                            <output>lib</output>
+                                            <includes>
+                                                <include>**/*.jar</include>
+                                            </includes>
+                                        </fileSet>
+                                    </fileSets>
+                                </aktienfinder-scraper>
+                            </javaArchive>
+                        </assemble>
+                    </jreleaser>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assemble-modular-distribution</id>
+                        <goals>
+                            <goal>assemble</goal>
+                        </goals>
+                        <phase>package</phase>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 
 </project>

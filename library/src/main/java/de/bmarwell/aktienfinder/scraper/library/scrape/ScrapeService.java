@@ -29,7 +29,6 @@ import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockFazit;
 import jakarta.json.Json;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -45,8 +44,8 @@ public class ScrapeService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScrapeService.class);
 
-    public List<AktienfinderStock> scrapeAll(Set<String> stockIsins) throws IOException {
-        final var resultList = new ArrayList<AktienfinderStock>();
+    public List<AktienfinderStock> scrapeAll(Set<String> stockIsins) {
+        var resultList = new ArrayList<AktienfinderStock>();
 
         for (String stockIsin : stockIsins) {
             Optional<AktienfinderStock> scrapedStock = this.scrape(stockIsin);
@@ -59,46 +58,46 @@ public class ScrapeService {
         return List.copyOf(resultList);
     }
 
-    private Optional<AktienfinderStock> scrape(String stockIsin) throws IOException {
+    private Optional<AktienfinderStock> scrape(String stockIsin) {
         Optional<URI> scrapeUrl = getCanonicalDataUrl(stockIsin);
 
         if (scrapeUrl.isEmpty()) {
             return Optional.empty();
         }
 
-        final var canonicalDataUrl = scrapeUrl.orElseThrow();
+        var canonicalDataUrl = scrapeUrl.orElseThrow();
 
-        final var xhrResponses = new HashMap<String, String>();
+        var xhrResponses = new HashMap<String, String>();
 
         try (Playwright playwright = Playwright.create()) {
-            final BrowserType browserType = playwright.chromium();
+            BrowserType browserType = playwright.chromium();
 
             try (Browser browser = browserType.launch()) {
-                loadAndPopulate(browser, xhrResponses, canonicalDataUrl);
+                loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
 
                 // retry
                 if (xhrResponses.get("StockProfile") == null) {
-                    loadAndPopulate(browser, xhrResponses, canonicalDataUrl);
+                    loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
                 }
                 // retry 2
                 if (xhrResponses.get("Scorings") == null) {
-                    loadAndPopulate(browser, xhrResponses, canonicalDataUrl);
+                    loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
                 }
             }
         }
 
         // now read
-        final var stockProfile =
+        var stockProfile =
                 new ByteArrayInputStream(xhrResponses.get("StockProfile").getBytes(StandardCharsets.UTF_8));
-        final var stockDataReader = Json.createReader(stockProfile);
-        final var stockData = stockDataReader.readObject();
+        var stockDataReader = Json.createReader(stockProfile);
+        var stockData = stockDataReader.readObject();
 
-        final var scoringResponse =
+        var scoringResponse =
                 new ByteArrayInputStream(xhrResponses.get("Scorings").getBytes(StandardCharsets.UTF_8));
-        final var scoringReader = Json.createReader(scoringResponse);
-        final var scoringData = scoringReader.readObject();
-        final var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"));
-        final var stockBewertung = new StockBewertung(
+        var scoringReader = Json.createReader(scoringResponse);
+        var scoringData = scoringReader.readObject();
+        var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"));
+        var stockBewertung = new StockBewertung(
                 stockData
                         .getJsonNumber("ReportedEpsCorrelation")
                         .bigDecimalValue()
@@ -109,7 +108,7 @@ public class ScrapeService {
                         .floatValue(),
                 stockData.getJsonNumber("OcfCorrelation").bigDecimalValue().floatValue());
         // https://dividendenfinder.de/Securities/1112/Scorings
-        final var anlagestrategie = new Anlagestrategie(
+        var anlagestrategie = new Anlagestrategie(
                 scoringData
                         .getJsonObject("DividendEarningsScore")
                         .getJsonNumber("ResultScore")
@@ -125,18 +124,22 @@ public class ScrapeService {
                         .getJsonNumber("ResultScore")
                         .bigIntegerValue()
                         .shortValueExact());
-        final var stockFazit = new StockFazit(anlagestrategie, "", "");
-        final var aktienfinderStock = new AktienfinderStock(stock, stockBewertung, stockFazit);
+        var stockFazit = new StockFazit(anlagestrategie, "", "");
+        var aktienfinderStock = new AktienfinderStock(stock, stockBewertung, stockFazit);
 
         return Optional.of(aktienfinderStock);
     }
 
-    private static void loadAndPopulate(Browser browser, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
+    private static void loadAndPopulate(
+            String stockIsin, Browser browser, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
         BrowserContext context = browser.newContext();
         Page page = context.newPage();
-        final var navigateOptions = new NavigateOptions();
+        page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));
+        var navigateOptions = new NavigateOptions();
         navigateOptions.setTimeout(10_000L);
         context.onResponse(response -> {
+            LOG.debug("loaded data: [{}] for ISIN [{}].", response.url(), stockIsin);
+
             if (response.url().endsWith("Scorings")) {
                 xhrResponses.put("Scorings", response.text());
             }
@@ -154,7 +157,7 @@ public class ScrapeService {
             }
         });
 
-        final var navResponse = page.navigate(canonicalDataUrl.toString(), navigateOptions);
+        var navResponse = page.navigate(canonicalDataUrl.toString(), navigateOptions);
         navResponse.finished();
 
         if (navResponse.status() != 200) {
@@ -166,7 +169,7 @@ public class ScrapeService {
             return;
         }
 
-        final var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
+        var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
 
         if (aktieKaufHeading != null) {
             aktieKaufHeading.scrollIntoViewIfNeeded();
@@ -174,27 +177,27 @@ public class ScrapeService {
     }
 
     private static Optional<URI> getCanonicalDataUrl(String stockIsin) {
-        final var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/" + stockIsin.strip());
+        var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/" + stockIsin.strip());
 
         try (Playwright playwright = Playwright.create()) {
-            final BrowserType browserType = playwright.chromium();
+            BrowserType browserType = playwright.chromium();
             try (Browser browser = browserType.launch()) {
                 BrowserContext context = browser.newContext();
                 Page page = context.newPage();
-                final var navigateOptions = new NavigateOptions();
+                var navigateOptions = new NavigateOptions();
                 navigateOptions.setTimeout(10_000L);
-                page.onDOMContentLoaded(pageContent -> LOG.info("getting: [{}]", pageContent.url()));
-                final var navResponse = page.navigate(searchUri.toString(), navigateOptions);
+                page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));
+                var navResponse = page.navigate(searchUri.toString(), navigateOptions);
                 navResponse.finished();
 
                 if (navResponse.status() != 200) {
                     LOG.warn("could not retrieve result of [{}], http status = [{}]", searchUri, navResponse.status());
 
-                    final var bodyOut = new ByteArrayOutputStream();
+                    var bodyOut = new ByteArrayOutputStream();
                     bodyOut.writeBytes(navResponse.body());
-                    final var errorBody = bodyOut.toString(StandardCharsets.UTF_8);
+                    var errorBody = bodyOut.toString(StandardCharsets.UTF_8);
 
-                    final var headers = navResponse.headers();
+                    var headers = navResponse.headers();
 
                     LOG.warn("Reason: [{}], [{}]", errorBody, headers);
 
@@ -202,15 +205,15 @@ public class ScrapeService {
                 }
 
                 // [{"Name":"NVIDIA","Isin":"US67066G1040","Symbol":"NVDA"}]
-                final var body = new ByteArrayInputStream(navResponse.body());
-                final var jsonReader = Json.createReaderFactory(Map.of()).createReader(body);
+                var body = new ByteArrayInputStream(navResponse.body());
+                var jsonReader = Json.createReaderFactory(Map.of()).createReader(body);
 
-                final var resultItem = jsonReader.readObject().asJsonObject();
-                final var resultIsin = resultItem.getString("Isin");
+                var resultItem = jsonReader.readObject().asJsonObject();
+                var resultIsin = resultItem.getString("Isin");
 
                 if (stockIsin.equals(resultIsin)) {
-                    final var securityName = resultItem.getString("Name");
-                    final var uri = URI.create("https://aktienfinder.net/aktien-profil/" + securityName + "-Aktie");
+                    var securityName = resultItem.getString("Name");
+                    var uri = URI.create("https://aktienfinder.net/aktien-profil/" + securityName + "-Aktie");
 
                     return Optional.of(uri);
                 }

@@ -39,8 +39,7 @@ public class ScrapeCommand implements Callable<Integer> {
         List<AktienfinderStock> ratings = scrapeService.scrapeAll(stockIsins);
 
         System.out.println(ratings);
-        // TODO: implement
-        throw new UnsupportedOperationException(
-                "not yet implemented: [de.bmarwell.aktienfinder.scraper.app.Scrape::call].");
+
+        return 0;
     }
 }

@@ -106,10 +106,10 @@
                                         <path>${project.build.directory}/${project.build.finalName}.jar</path>
                                     </mainJar>
                                     <java>
-                                        <mainModule>${app.mainModule}</mainModule>
+                                        <!--mainModule>${app.mainModule}</mainModule-->
                                         <mainClass>${app.mainClass}</mainClass>
                                         <options>
-                                            -Xms64m -Xmx128m
+                                            -Xms64m -Xmx128m -Dlogback.statusListenerClass=ch.qos.logback.core.status.NopStatusListener
                                         </options>
                                     </java>
                                     <fileSets>

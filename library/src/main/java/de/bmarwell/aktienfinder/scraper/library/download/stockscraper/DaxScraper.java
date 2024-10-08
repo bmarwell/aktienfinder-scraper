@@ -13,15 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.download;
+package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
-import java.util.List;
+import java.net.URI;
 
-public record StockDownloadOption(List<StockIndex> stockIndices, int resultsPerSource) {
+public class DaxScraper extends AbstractBoerseFrankfurtScraper {
 
-    private static final int RESULTS_PER_SOURCE = 100;
+    @Override
+    public URI uri() {
+        return URI.create("https://www.boerse-frankfurt.de/indices/dax-kursindex/constituents");
+    }
 
-    static StockDownloadOption all() {
-        return new StockDownloadOption(StockIndex.all(), RESULTS_PER_SOURCE);
+    @Override
+    public String getName() {
+        return "DAX";
     }
 }

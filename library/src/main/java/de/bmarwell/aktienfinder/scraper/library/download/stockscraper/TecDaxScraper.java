@@ -13,19 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.download;
+package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class NikkeiScraper extends AbstractBoerseFrankfurtScraper {
+public class TecDaxScraper extends AbstractBoerseFrankfurtScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/nikkei-225/constituents");
+        return URI.create("https://www.boerse-frankfurt.de/indices/tecdax-kursindex/constituents");
     }
 
     @Override
     public String getName() {
-        return "Nikkei 225";
+        return "TecDAX";
     }
 }

@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.download;
+package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class DaxScraper extends AbstractBoerseFrankfurtScraper {
+public class MDaxScraper extends AbstractBoerseFrankfurtScraper {
 
     @Override
     public URI uri() {
@@ -26,6 +26,6 @@ public class DaxScraper extends AbstractBoerseFrankfurtScraper {
 
     @Override
     public String getName() {
-        return "DAX";
+        return "MDAX";
     }
 }

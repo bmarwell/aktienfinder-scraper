@@ -13,12 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library;
+package de.bmarwell.aktienfinder.scraper.library.download;
 
-import de.bmarwell.aktienfinder.scraper.library.download.DaxScraper;
-import de.bmarwell.aktienfinder.scraper.library.download.NasdaqScraper;
-import de.bmarwell.aktienfinder.scraper.library.download.NikkeiScraper;
-import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.DaxScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.DowJonesScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.MDaxScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.NasdaqScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.NikkeiScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.SDaxScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.SP500Scraper;
 import java.util.List;
 
 /**
@@ -26,6 +29,11 @@ import java.util.List;
  */
 public enum StockIndex {
     DAX(new DaxScraper()),
+    MDAX(new MDaxScraper()),
+    SDAX(new SDaxScraper()),
+    DOW_JONES(new DowJonesScraper()),
+    SP500(new SP500Scraper()),
+    // MSCI_AC_ASEAN(new MsciSouthEastAsiaScraper()),
     NIKKEI_225(new NikkeiScraper()),
     NASDAQ_100(new NasdaqScraper());
 

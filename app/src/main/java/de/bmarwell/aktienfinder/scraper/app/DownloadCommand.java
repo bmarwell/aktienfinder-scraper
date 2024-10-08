@@ -16,9 +16,9 @@
 package de.bmarwell.aktienfinder.scraper.app;
 
 import de.bmarwell.aktienfinder.scraper.library.Stock;
-import de.bmarwell.aktienfinder.scraper.library.StockIndex;
 import de.bmarwell.aktienfinder.scraper.library.download.DownloadListService;
 import de.bmarwell.aktienfinder.scraper.library.download.StockDownloadOption;
+import de.bmarwell.aktienfinder.scraper.library.download.StockIndex;
 import jakarta.json.Json;
 import jakarta.json.JsonArrayBuilder;
 import jakarta.json.JsonObject;
@@ -28,7 +28,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -46,12 +48,15 @@ public class DownloadCommand implements Callable<Integer> {
                 OutputStream outputStream = Files.newOutputStream(
                         outputFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                 JsonWriter jsonWriter = Json.createWriter(outputStream)) {
-            StockDownloadOption stockDownloadOption = new StockDownloadOption(StockIndex.all(), 9999);
+            var indexes = List.of(StockIndex.values());
+            StockDownloadOption stockDownloadOption = new StockDownloadOption(indexes, 9999);
             List<Stock> stocks = downloadListService.downloadStocks(stockDownloadOption);
+
+            Set<Stock> stockSet = stocks.stream().collect(Collectors.toUnmodifiableSet());
 
             JsonArrayBuilder results = Json.createArrayBuilder();
 
-            for (Stock stock : stocks) {
+            for (Stock stock : stockSet) {
                 JsonObject result = Json.createObjectBuilder()
                         .add("name", Json.createValue(stock.name()))
                         .add("isin", Json.createValue(stock.isin()))

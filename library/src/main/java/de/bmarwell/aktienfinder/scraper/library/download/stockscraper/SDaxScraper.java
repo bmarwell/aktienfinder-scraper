@@ -13,19 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.download;
+package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class NasdaqScraper extends AbstractBoerseFrankfurtScraper {
+public class SDaxScraper extends AbstractBoerseFrankfurtScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/nasdaq-100/constituents");
+        return URI.create("https://www.boerse-frankfurt.de/indices/sdax-kursindex/constituents");
     }
 
     @Override
     public String getName() {
-        return "NASDAQ 100";
+        return "SDAX";
     }
 }

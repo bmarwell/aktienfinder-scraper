@@ -17,17 +17,29 @@ package de.bmarwell.aktienfinder.scraper.library.download;
 
 import com.microsoft.playwright.Playwright;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
-import de.bmarwell.aktienfinder.scraper.library.StockIndex;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
+import de.bmarwell.aktienfinder.scraper.library.scrape.ExecutorHelper;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DownloadListService implements AutoCloseable {
 
-    public final PoorMansCache<Playwright> browsers = new PoorMansCache<>(4, playwrightCreator());
+    private static final Logger LOG = LoggerFactory.getLogger(DownloadListService.class);
+
+    private final ExecutorService executor = Executors.newWorkStealingPool(ExecutorHelper.getNumberThreads());
+
+    private final PoorMansCache<Playwright> browsers =
+            new PoorMansCache<>(ExecutorHelper.getNumberThreads(), playwrightCreator());
 
     private Supplier<Playwright> playwrightCreator() {
         return Playwright::create;
@@ -38,25 +50,39 @@ public class DownloadListService implements AutoCloseable {
     }
 
     public List<Stock> downloadStocks(StockDownloadOption stockDownloadOption) {
-        List<Stock> stocks = new ArrayList<>();
+        Set<Stock> stocks = new LinkedHashSet<>();
+        List<Future<List<Stock>>> threads = new ArrayList<>();
 
         for (StockIndex stockIndex : stockDownloadOption.stockIndices()) {
-            try (Instance<Playwright> playwrightInstance = browsers.getBlocking()) {
-                Collection<Stock> stocksFromIndex =
-                        stockIndex.getStockRetriever().getStocks(playwrightInstance.instance());
-                stocks.addAll(stocksFromIndex);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            Future<List<Stock>> future = executor.submit(() -> retrieve(stockIndex));
+            threads.add(future);
         }
 
-        // TODO: replace with unique items
+        for (Future<List<Stock>> thread : threads) {
+            try {
+                List<Stock> resultStocks = thread.get();
+                stocks.addAll(resultStocks);
+            } catch (InterruptedException | ExecutionException ex) {
+                LOG.error("Problem returning thread {}", thread, ex);
+            }
+        }
 
         return List.copyOf(stocks);
     }
 
+    private List<Stock> retrieve(StockIndex stockIndex) {
+        try (Instance<Playwright> playwrightInstance = browsers.getBlocking()) {
+            return stockIndex.getStockRetriever().getStocks(playwrightInstance.instance());
+        } catch (Exception e) {
+            LOG.error("Problem", e);
+            return List.of();
+        }
+    }
+
     @Override
     public void close() throws Exception {
-        //
+        executor.shutdown();
+        browsers.close();
+        executor.shutdownNow();
     }
 }

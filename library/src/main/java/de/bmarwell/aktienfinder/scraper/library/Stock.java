@@ -15,6 +15,25 @@
  */
 package de.bmarwell.aktienfinder.scraper.library;
 
+import java.util.Objects;
 import java.util.Optional;
 
-public record Stock(String name, String isin, Optional<String> index) {}
+public record Stock(String name, String isin, Optional<String> index) {
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Stock stock = (Stock) o;
+        return Objects.equals(name, stock.name) && Objects.equals(isin, stock.isin);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, isin);
+    }
+}

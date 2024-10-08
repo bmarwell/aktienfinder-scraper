@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.download;
+package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
@@ -23,15 +23,14 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.ElementState;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
+import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import de.bmarwell.aktienfinder.scraper.library.scrape.DomHelper;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockRetriever {
+public abstract class AbstractWallstreetOnlineDeScraper implements StockIndexStockRetriever {
 
     private static final Pattern ISIN_EXTRACTOR = Pattern.compile("&isin=([a-zA-Z0-9]+)&");
 
@@ -54,6 +53,8 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
             int pageNumber = 0;
             do {
                 if (nextArrow != null) {
+                    DomHelper.tryScrollIntoView(nextArrow);
+                    System.out.println(nextArrow.asElement());
                     nextArrow.click();
                 }
 
@@ -62,9 +63,11 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
                 System.out.println("Reading from page #" + pageNumber);
                 extractFromCurrentPage(page, stocks);
 
-                // TODO: page 2...
-                nextArrow = page.querySelector(
-                        "app-page-bar div.page-bar-row div.ng-star-inserted button.page-bar-type-button.btn.btn-lg span.icon-arrow-step-right-grey-big");
+                nextArrow = page.querySelectorAll("div#highlowvalues a.next.page-link").stream()
+                        .filter(ElementHandle::isVisible)
+                        .filter(ElementHandle::isEnabled)
+                        .findFirst()
+                        .orElse(null);
             } while (nextArrow != null && nextArrow.asElement().isEnabled());
         }
 
@@ -72,7 +75,7 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
     }
 
     private void extractFromCurrentPage(Page page, List<Stock> stocks) {
-        ElementHandle mainTable = page.querySelector("table");
+        ElementHandle mainTable = page.querySelector("table#highlowvalues");
         DomHelper.tryScrollIntoView(mainTable);
 
         mainTable.querySelector("tbody").waitForElementState(ElementState.VISIBLE);
@@ -80,18 +83,21 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
         for (ElementHandle tbodyTr : mainTable.querySelectorAll("tbody tr")) {
             List<ElementHandle> stock = tbodyTr.querySelectorAll("td");
             String stockName = stock.get(0).innerText();
-            String chartUrl = stock.get(11).querySelector("img").getAttribute("src");
-            String query = URI.create(chartUrl).getQuery();
-            Matcher matcher = ISIN_EXTRACTOR.matcher(query);
-            boolean found = matcher.find();
 
-            if (!found) {
-                continue;
-            }
+            System.out.println("found stock: " + stockName);
 
-            String isin = matcher.group(1);
-
-            stocks.add(new Stock(stockName, isin, Optional.of(getName())));
+            // String chartUrl = stock.get(11).querySelector("img").getAttribute("src");
+            // String query = URI.create(chartUrl).getQuery();
+            // Matcher matcher = ISIN_EXTRACTOR.matcher(query);
+            // boolean found = matcher.find();
+            //
+            // if (!found) {
+            //    continue;
+            // }
+            //
+            // String isin = matcher.group(1);
+            //
+            // stocks.add(new Stock(stockName, isin, Optional.of(getName())));
         }
     }
 }

@@ -36,7 +36,7 @@ public class DefaultStyler {
 
     private CellStyle roundToTwoDigits(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
-        style.setDataFormat(workbook.getCreationHelper().createDataFormat().getFormat("0.##"));
+        style.setDataFormat(workbook.getCreationHelper().createDataFormat().getFormat("0.00"));
 
         return style;
     }

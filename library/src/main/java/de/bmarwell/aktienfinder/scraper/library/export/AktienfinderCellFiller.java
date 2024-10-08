@@ -15,46 +15,64 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.export;
 
+import de.bmarwell.aktienfinder.scraper.library.lang.TriConsumer;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
+import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import org.apache.poi.common.usermodel.HyperlinkType;
+import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Hyperlink;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Workbook;
 
 public record AktienfinderCellFiller(
-        Function<AktienfinderStock, Object> valueExtractor, BiFunction<AktienfinderStock, Workbook, CellStyle> styler) {
+        Function<AktienfinderStock, Object> valueExtractor,
+        TriConsumer<Cell, AktienfinderStock, Object> cellConsumer,
+        BiFunction<AktienfinderStock, Workbook, CellStyle> styler) {
 
     public static AktienfinderCellFiller neutral(Function<AktienfinderStock, Object> valueExtractor) {
         return new AktienfinderCellFiller(
-                valueExtractor, (af, wb) -> new DefaultStyler().apply(valueExtractor, af, wb));
+                valueExtractor, text, (af, wb) -> new DefaultStyler().apply(valueExtractor, af, wb));
     }
 
     public static AktienfinderCellFiller withLink(Function<AktienfinderStock, Object> valueExtractor) {
-        return new AktienfinderCellFiller(valueExtractor, linker);
+        return new AktienfinderCellFiller(
+                valueExtractor, linker, (af, wb) -> new DefaultStyler().apply(valueExtractor, af, wb));
     }
 
     public static AktienfinderCellFiller fromBewertung(Function<AktienfinderStock, Object> valueExtractor) {
-        return new AktienfinderCellFiller(valueExtractor, bewertungsStyler);
+        return new AktienfinderCellFiller(valueExtractor, text, bewertungsStyler);
     }
 
     public static AktienfinderCellFiller fromZusammenfassung(Function<AktienfinderStock, Object> valueExtractor) {
-        return new AktienfinderCellFiller(valueExtractor, summaryStyler);
+        return new AktienfinderCellFiller(valueExtractor, text, summaryStyler);
     }
 
-    static BiFunction<AktienfinderStock, Workbook, CellStyle> linker = (af, workbook) -> {
-        CellStyle cellStyle = workbook.createCellStyle();
-        Font font = workbook.createFont();
-        font.setFontName(workbook.getFontAt(0).getFontName());
-        font.setFontHeightInPoints(workbook.getFontAt(0).getFontHeightInPoints());
-        font.setUnderline(Font.U_SINGLE);
-        font.setColor(IndexedColors.BLUE.getIndex());
-        cellStyle.setFont(font);
-
-        return cellStyle;
+    static TriConsumer<Cell, AktienfinderStock, Object> text = (cell, af, value) -> {
+        switch (value) {
+            case String s -> cell.setCellValue(s);
+            case BigDecimal bd -> cell.setCellValue(bd.doubleValue());
+            case Integer n -> cell.setCellValue(n.doubleValue());
+            case Short sh -> cell.setCellValue(sh);
+            case Double d -> cell.setCellValue(d);
+            case Float f -> cell.setCellValue(f);
+            default -> cell.setCellValue(value.toString());
+        }
     };
+
+    static TriConsumer<Cell, AktienfinderStock, Object> linker = text.andThen((cell, af, value) -> {
+        Hyperlink link =
+                cell.getRow().getSheet().getWorkbook().getCreationHelper().createHyperlink(HyperlinkType.URL);
+        String urlName =
+                URLEncoder.encode(af.stock().name(), StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        link.setAddress("https://aktienfinder.net/aktien-profil/" + urlName + "-Aktie");
+        cell.setHyperlink(link);
+    });
 
     static BiFunction<AktienfinderStock, Workbook, CellStyle> bewertungsStyler = (aktienfinderStock, workbook) -> {
         CellStyle cellStyle = workbook.createCellStyle();

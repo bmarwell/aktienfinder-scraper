@@ -17,7 +17,6 @@ package de.bmarwell.aktienfinder.scraper.library.export;
 
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -145,19 +144,10 @@ public class ExportService {
     }
 
     private static void writeRowCell(AktienfinderStock afStock, Row stockRow, int col) {
-        AktienfinderCellFiller aktienfinderCellFiller = CELL_FILLERS.get(col);
-        Object value = aktienfinderCellFiller.valueExtractor().apply(afStock);
         Cell cellByIndex = stockRow.createCell(col);
-
-        switch (value) {
-            case String s -> cellByIndex.setCellValue(s);
-            case BigDecimal bd -> cellByIndex.setCellValue(bd.doubleValue());
-            case Integer n -> cellByIndex.setCellValue(n.doubleValue());
-            case Short sh -> cellByIndex.setCellValue(sh);
-            case Double d -> cellByIndex.setCellValue(d);
-            case Float f -> cellByIndex.setCellValue(f);
-            default -> cellByIndex.setCellValue(value.toString());
-        }
+        AktienfinderCellFiller aktienfinderCellFiller = CELL_FILLERS.get(col);
+        var value = aktienfinderCellFiller.valueExtractor().apply(afStock);
+        aktienfinderCellFiller.cellConsumer().accept(cellByIndex, afStock, value);
 
         CellStyle style = aktienfinderCellFiller
                 .styler()

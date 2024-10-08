@@ -21,15 +21,21 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.PlaywrightException;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
+import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache;
+import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.Anlagestrategie;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockBewertung;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockFazit;
 import jakarta.json.Json;
+import jakarta.json.JsonValue;
+import jakarta.json.JsonValue.ValueType;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,12 +43,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ScrapeService {
+public class ScrapeService implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScrapeService.class);
+
+    ExecutorService executor = Executors.newWorkStealingPool(4);
+
+    PoorMansCache<Playwright> browserCache = new PoorMansCache<>(4, this::createPlaywright);
 
     public List<AktienfinderStock> scrapeAll(Set<String> stockIsins) {
         var resultList = new ArrayList<AktienfinderStock>();
@@ -69,8 +81,8 @@ public class ScrapeService {
 
         var xhrResponses = new HashMap<String, String>();
 
-        try (Playwright playwright = Playwright.create()) {
-            BrowserType browserType = playwright.chromium();
+        try (Instance<Playwright> playwrightInstance = this.browserCache.get()) {
+            BrowserType browserType = playwrightInstance.instance().chromium();
 
             try (Browser browser = browserType.launch()) {
                 loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
@@ -84,6 +96,13 @@ public class ScrapeService {
                     loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
                 }
             }
+        } catch (Exception autoCloseEx) {
+            LOG.error("Problem re-using playwright", autoCloseEx);
+        }
+
+        if (xhrResponses.get("StockProfile") == null) {
+            LOG.warn("empty StockProfile for stockIsin [{}]", stockIsin);
+            return Optional.empty();
         }
 
         // now read
@@ -92,10 +111,6 @@ public class ScrapeService {
         var stockDataReader = Json.createReader(stockProfile);
         var stockData = stockDataReader.readObject();
 
-        var scoringResponse =
-                new ByteArrayInputStream(xhrResponses.get("Scorings").getBytes(StandardCharsets.UTF_8));
-        var scoringReader = Json.createReader(scoringResponse);
-        var scoringData = scoringReader.readObject();
         var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"));
         var stockBewertung = new StockBewertung(
                 stockData
@@ -107,34 +122,62 @@ public class ScrapeService {
                         .bigDecimalValue()
                         .floatValue(),
                 stockData.getJsonNumber("OcfCorrelation").bigDecimalValue().floatValue());
+
         // https://dividendenfinder.de/Securities/1112/Scorings
-        var anlagestrategie = new Anlagestrategie(
-                scoringData
-                        .getJsonObject("DividendEarningsScore")
-                        .getJsonNumber("ResultScore")
-                        .bigIntegerValue()
-                        .shortValueExact(),
-                scoringData
-                        .getJsonObject("DividendGrowthScore")
-                        .getJsonNumber("ResultScore")
-                        .bigIntegerValue()
-                        .shortValueExact(),
-                scoringData
-                        .getJsonObject("EarningGrowthScore")
-                        .getJsonNumber("ResultScore")
-                        .bigIntegerValue()
-                        .shortValueExact());
+        Anlagestrategie anlagestrategie;
+        if (xhrResponses.get("Scorings") == null) {
+            anlagestrategie = new Anlagestrategie((short) -1, (short) -1, (short) -1);
+        } else {
+            anlagestrategie = getAnlageStrategieScorings(xhrResponses);
+        }
+
         var stockFazit = new StockFazit(anlagestrategie, "", "");
         var aktienfinderStock = new AktienfinderStock(stock, stockBewertung, stockFazit);
 
         return Optional.of(aktienfinderStock);
     }
 
+    private static Anlagestrategie getAnlageStrategieScorings(HashMap<String, String> xhrResponses) {
+        var scoringResponse =
+                new ByteArrayInputStream(xhrResponses.get("Scorings").getBytes(StandardCharsets.UTF_8));
+        var scoringReader = Json.createReader(scoringResponse);
+        var scoringData = scoringReader.readObject();
+
+        LOG.debug("scoringData: {}", scoringData);
+
+        JsonValue dividendEarningsScore = scoringData.get("DividendEarningsScore");
+        JsonValue dividendGrowthScore = scoringData.get("DividendGrowthScore");
+        JsonValue earningGrowthScore = scoringData.get("EarningGrowthScore");
+
+        return new Anlagestrategie(
+                (dividendEarningsScore != null && dividendEarningsScore.getValueType() != ValueType.NULL)
+                        ? dividendEarningsScore
+                                .asJsonObject()
+                                .getJsonNumber("ResultScore")
+                                .bigIntegerValue()
+                                .shortValueExact()
+                        : (short) -1,
+                (dividendGrowthScore != null && dividendGrowthScore.getValueType() != ValueType.NULL)
+                        ? dividendGrowthScore
+                                .asJsonObject()
+                                .getJsonNumber("ResultScore")
+                                .bigIntegerValue()
+                                .shortValueExact()
+                        : (short) -1,
+                (earningGrowthScore != null && earningGrowthScore.getValueType() != ValueType.NULL)
+                        ? earningGrowthScore
+                                .asJsonObject()
+                                .getJsonNumber("ResultScore")
+                                .bigIntegerValue()
+                                .shortValueExact()
+                        : (short) -1);
+    }
+
     private static void loadAndPopulate(
             String stockIsin, Browser browser, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
         BrowserContext context = browser.newContext();
         Page page = context.newPage();
-        page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));
+        page.onDOMContentLoaded(pageContent -> LOG.info("loaded: [{}]", pageContent.url()));
         var navigateOptions = new NavigateOptions();
         navigateOptions.setTimeout(10_000L);
         context.onResponse(response -> {
@@ -172,7 +215,11 @@ public class ScrapeService {
         var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
 
         if (aktieKaufHeading != null) {
-            aktieKaufHeading.scrollIntoViewIfNeeded();
+            try {
+                aktieKaufHeading.scrollIntoViewIfNeeded();
+            } catch (PlaywrightException pe) {
+                LOG.error("Problem loading fazit for ISIN [{}], URL = [{}].", stockIsin, canonicalDataUrl, pe);
+            }
         }
     }
 
@@ -213,7 +260,9 @@ public class ScrapeService {
 
                 if (stockIsin.equals(resultIsin)) {
                     var securityName = resultItem.getString("Name");
-                    var uri = URI.create("https://aktienfinder.net/aktien-profil/" + securityName + "-Aktie");
+                    String urlSafeStockName = URLEncoder.encode(securityName, StandardCharsets.UTF_8)
+                            .replaceAll("\\+", "%20");
+                    var uri = URI.create("https://aktienfinder.net/aktien-profil/" + urlSafeStockName + "-Aktie");
 
                     return Optional.of(uri);
                 }
@@ -228,5 +277,16 @@ public class ScrapeService {
         }
 
         return Optional.empty();
+    }
+
+    @Override
+    public void close() throws Exception {
+        this.executor.shutdown();
+        this.browserCache.close();
+        this.executor.shutdownNow();
+    }
+
+    private Playwright createPlaywright() {
+        return Playwright.create();
     }
 }

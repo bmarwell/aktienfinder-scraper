@@ -15,6 +15,9 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.scrape;
 
+import static de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService.ResponseConstants.BEWERTUNG;
+import static de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService.ResponseConstants.ZUSAMMENFASSUNG;
+
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
@@ -43,8 +46,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,18 +58,26 @@ public class ScrapeService implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScrapeService.class);
 
-    ExecutorService executor = Executors.newWorkStealingPool(4);
+    private final ExecutorService executor = Executors.newWorkStealingPool(ExecutorHelper.getNumberThreads());
 
-    PoorMansCache<Playwright> browserCache = new PoorMansCache<>(4, this::createPlaywright);
+    private final PoorMansCache<Playwright> browserCache =
+            new PoorMansCache<>(ExecutorHelper.getNumberThreads(), this::createPlaywright);
 
     public List<AktienfinderStock> scrapeAll(Set<String> stockIsins) {
         var resultList = new ArrayList<AktienfinderStock>();
+        var threads = new ArrayList<Future<Optional<AktienfinderStock>>>();
 
         for (String stockIsin : stockIsins) {
-            Optional<AktienfinderStock> scrapedStock = this.scrape(stockIsin);
+            var scraperThread = executor.submit(() -> this.scrape(stockIsin));
+            threads.add(scraperThread);
+        }
 
-            if (scrapedStock.isPresent()) {
-                resultList.add(scrapedStock.orElseThrow());
+        for (var thread : threads) {
+            try {
+                Optional<AktienfinderStock> aktienfinderStock = thread.get();
+                aktienfinderStock.ifPresent(resultList::add);
+            } catch (CancellationException | ExecutionException | InterruptedException ex) {
+                LOG.warn("Thread not finished: [{}]", thread, ex);
             }
         }
 
@@ -80,8 +94,10 @@ public class ScrapeService implements AutoCloseable {
         var canonicalDataUrl = scrapeUrl.orElseThrow();
 
         var xhrResponses = new HashMap<String, String>();
+        xhrResponses.put(BEWERTUNG, "unbewertet");
+        xhrResponses.put(ZUSAMMENFASSUNG, "neutral");
 
-        try (Instance<Playwright> playwrightInstance = this.browserCache.get()) {
+        try (Instance<Playwright> playwrightInstance = this.browserCache.getBlocking()) {
             BrowserType browserType = playwrightInstance.instance().chromium();
 
             try (Browser browser = browserType.launch()) {
@@ -131,8 +147,11 @@ public class ScrapeService implements AutoCloseable {
             anlagestrategie = getAnlageStrategieScorings(xhrResponses);
         }
 
-        var stockFazit = new StockFazit(anlagestrategie, "", "");
+        var stockFazit =
+                new StockFazit(anlagestrategie, xhrResponses.get(BEWERTUNG), xhrResponses.get(ZUSAMMENFASSUNG));
         var aktienfinderStock = new AktienfinderStock(stock, stockBewertung, stockFazit);
+
+        LOG.info("Stock: [{}].", aktienfinderStock);
 
         return Optional.of(aktienfinderStock);
     }
@@ -212,14 +231,53 @@ public class ScrapeService implements AutoCloseable {
             return;
         }
 
-        var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
+        try {
+            var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
 
-        if (aktieKaufHeading != null) {
-            try {
-                aktieKaufHeading.scrollIntoViewIfNeeded();
-            } catch (PlaywrightException pe) {
-                LOG.error("Problem loading fazit for ISIN [{}], URL = [{}].", stockIsin, canonicalDataUrl, pe);
+            if (aktieKaufHeading != null) {
+                DomHelper.tryScrollIntoView(aktieKaufHeading);
             }
+
+            var stockProfileSummary = page.querySelector(".stockprofile__summary_conclusion_row");
+
+            if (stockProfileSummary != null) {
+                DomHelper.tryScrollIntoView(stockProfileSummary);
+            }
+
+            var summaryInner = page.querySelector("div.stockprofile span.stockprofile__summary_row__inner");
+
+            if (summaryInner != null) {
+                xhrResponses.put(BEWERTUNG, summaryInner.innerText().strip());
+            }
+
+            var conclusionRow = page.querySelector(".stockprofile__summary_conclusion_row");
+
+            if (conclusionRow != null) {
+                String summaryClass = conclusionRow.getAttribute("class");
+
+                if (summaryClass != null && summaryClass.contains("background--negative")) {
+                    xhrResponses.put(ZUSAMMENFASSUNG, "negative");
+                }
+
+                if (summaryClass != null && summaryClass.contains("background--negative-light")) {
+                    xhrResponses.put(ZUSAMMENFASSUNG, "negative-light");
+                }
+
+                if (summaryClass != null && summaryClass.contains("background--neutral-light")) {
+                    xhrResponses.put(ZUSAMMENFASSUNG, "neutral-light");
+                }
+
+                if (summaryClass != null && summaryClass.contains("background--positive")) {
+                    xhrResponses.put(ZUSAMMENFASSUNG, "positive");
+                }
+
+                if (summaryClass != null && summaryClass.contains("background--positive-light")) {
+                    xhrResponses.put(ZUSAMMENFASSUNG, "positive-light");
+                }
+            }
+
+        } catch (PlaywrightException pe) {
+            LOG.error("Problem loading fazit for ISIN [{}], URL = [{}].", stockIsin, canonicalDataUrl, pe);
         }
     }
 
@@ -288,5 +346,10 @@ public class ScrapeService implements AutoCloseable {
 
     private Playwright createPlaywright() {
         return Playwright.create();
+    }
+
+    static class ResponseConstants {
+        static final String ZUSAMMENFASSUNG = "bewertungsfarbe";
+        static final String BEWERTUNG = "bewertungstext";
     }
 }

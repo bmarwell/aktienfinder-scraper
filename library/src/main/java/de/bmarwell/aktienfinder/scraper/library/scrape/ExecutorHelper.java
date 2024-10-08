@@ -13,6 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.scrape.value;
+package de.bmarwell.aktienfinder.scraper.library.scrape;
 
-public record StockFazit(Anlagestrategie anlagestrategie, String bewertung, String zusammenfassung) {}
+public final class ExecutorHelper {
+
+    public static int getNumberThreads() {
+        int availableProcessors = Runtime.getRuntime().availableProcessors();
+
+        return Math.max(availableProcessors - 1, 1);
+    }
+}

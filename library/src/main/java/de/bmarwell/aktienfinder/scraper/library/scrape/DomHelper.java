@@ -13,6 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.scrape.value;
+package de.bmarwell.aktienfinder.scraper.library.scrape;
 
-public record StockFazit(Anlagestrategie anlagestrategie, String bewertung, String zusammenfassung) {}
+import com.microsoft.playwright.ElementHandle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public final class DomHelper {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DomHelper.class);
+
+    public static void tryScrollIntoView(ElementHandle handle) {
+        try {
+            handle.scrollIntoViewIfNeeded();
+        } catch (RuntimeException rtEx) {
+            LOG.debug("could not scroll into view: [{}]", handle, rtEx);
+        }
+    }
+}

@@ -16,9 +16,14 @@
 package de.bmarwell.aktienfinder.scraper.library.caching;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -28,46 +33,85 @@ public class PoorMansCache<T> implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(PoorMansCache.class);
 
+    private static AtomicInteger creationCounter = new AtomicInteger();
+
     private final int maxSize;
     private final Supplier<T> supplier;
 
-    List<Instance<T>> availableInstances = new ArrayList<>();
-    List<Instance<T>> usedInstances = new ArrayList<>();
+    private final List<Instance<T>> availableInstances = Collections.synchronizedList(new ArrayList<>());
+    private final List<Instance<T>> usedInstances = Collections.synchronizedList(new ArrayList<>());
+    private boolean interrupted = false;
 
     public PoorMansCache(int maxSize, Supplier<T> supplier) {
         this.maxSize = maxSize;
         this.supplier = supplier;
     }
 
-    public Instance<T> get() {
-        if (!availableInstances.isEmpty() && usedInstances.size() < maxSize) {
+    public synchronized Instance<T> get() {
+        if (this.interrupted) {
+            return null;
+        }
+
+        cleanUpOld();
+
+        if (!availableInstances.isEmpty()) {
+            // instance available
             Instance<T> usedInstance = availableInstances.removeLast();
             usedInstances.add(usedInstance);
+
+            LOG.debug("returning available instance: {}", usedInstance);
 
             return usedInstance;
         }
 
-        if (availableInstances.size() + usedInstances.size() >= maxSize) {
-            return null;
+        if (totalInstances() < maxSize) {
+            LOG.debug("total instances: [{}] < maxSize [{}]", totalInstances(), maxSize);
+            // no available instance, but we can still create new ones
+            InstanceImpl<T> instance = createInstance();
+            this.usedInstances.add(instance);
+
+            LOG.debug("returning new instance: {}", instance);
+
+            return instance;
         }
 
-        if (usedInstances.size() >= maxSize || availableInstances.size() >= maxSize) {
-            return null;
+        return null;
+    }
+
+    public Instance<T> getBlocking(Duration timeout, Duration waitTime) throws TimeoutException, InterruptedException {
+        Instant start = Instant.now();
+
+        Instance<T> instance = get();
+        while (instance == null && Instant.now().isBefore(start.plusSeconds(timeout.getSeconds()))) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(waitTime.toMillis());
+            } catch (InterruptedException interruptedException) {
+                this.interrupted = true;
+                Thread.currentThread().interrupt();
+                throw interruptedException;
+            }
+
+            instance = get();
         }
 
-        InstanceImpl<T> instance = createInstance();
-        this.usedInstances.add(instance);
-
-        cleanUpOld();
+        if (instance == null) {
+            throw new TimeoutException("instance not available in time");
+        }
 
         return instance;
     }
 
+    public Instance<T> getBlocking() throws TimeoutException, InterruptedException {
+        return getBlocking(Duration.ofSeconds(10L), Duration.ofMillis(500L));
+    }
+
     InstanceImpl<T> createInstance() {
+        int instanceNumber = creationCounter.incrementAndGet();
+
         T object = supplier.get();
         Instant now = Instant.now();
 
-        return new InstanceImpl<>(object, now, this.availableInstances, this.usedInstances, this::closeInstance);
+        return new InstanceImpl<>(object, instanceNumber, now, this::closeInstance);
     }
 
     void closeInstance(Instance<T> instance) {
@@ -76,12 +120,21 @@ public class PoorMansCache<T> implements AutoCloseable {
     }
 
     protected void cleanUpOld() {
+        if (this.interrupted) {
+            return;
+        }
+
         this.availableInstances.removeIf(i -> {
             InstanceImpl<T> instance = (InstanceImpl<T>) i;
             Instant fiveMinutesAgo = Instant.now().minusSeconds(300L);
 
             return instance.createdOn.isAfter(fiveMinutesAgo);
         });
+    }
+
+    int totalInstances() {
+        LOG.trace("used/active: [{}], available: [{}]", usedInstances.size(), availableInstances.size());
+        return usedInstances.size() + availableInstances.size();
     }
 
     @Override
@@ -103,16 +156,12 @@ public class PoorMansCache<T> implements AutoCloseable {
         T instance();
     }
 
-    record InstanceImpl<T>(
-            T instance,
-            Instant createdOn,
-            List<Instance<T>> availableInstances,
-            List<Instance<T>> usedInstances,
-            Consumer<Instance<T>> closer)
+    record InstanceImpl<T>(T instance, int instanceNumber, Instant createdOn, Consumer<Instance<T>> closer)
             implements Instance<T>, AutoCloseable {
 
         @Override
         public void close() throws Exception {
+            LOG.debug("closing (returning) instance: [{}].", this);
             this.closer().accept(this);
         }
     }

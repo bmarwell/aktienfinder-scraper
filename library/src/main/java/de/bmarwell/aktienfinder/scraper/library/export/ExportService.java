@@ -22,7 +22,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
-import java.util.function.Function;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.FillPatternType;
@@ -33,8 +32,12 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ExportService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ExportService.class);
 
     private static final List<String> HEADERS = List.of(
             "ISIN",
@@ -46,8 +49,8 @@ public class ExportService {
             "Dividendenertragsscore",
             "Dividendenwachstumsscore",
             "Gewinnwachstumsscore",
-            "Geeignet",
-            "Farbe");
+            "Bewertung",
+            "Zusammenfassung");
 
     private static final List<HeaderGroup> HEADER_GROUPS = List.of(
             new HeaderGroup(3, "Basis"),
@@ -55,22 +58,25 @@ public class ExportService {
             new HeaderGroup(3, "Scores"),
             new HeaderGroup(2, "Fazit"));
 
-    private static final List<Function<AktienfinderStock, Object>> EXTRACTORS = List.of(
+    private static final List<AktienfinderCellFiller> CELL_FILLERS = List.of(
             // basis
-            (as) -> as.stock().isin(),
-            (as) -> as.stock().name(),
-            (as) -> as.stock().index().orElse(""),
+            AktienfinderCellFiller.withLink(((as) -> as.stock().isin())),
+            AktienfinderCellFiller.withLink((as) -> as.stock().name()),
+            AktienfinderCellFiller.neutral((as) -> as.stock().index().orElse("")),
             // basisdaten
-            (as) -> as.stockBewertung().blianzierterGewinn(),
-            (as) -> as.stockBewertung().bereinigterGewinn(),
-            (as) -> as.stockBewertung().operativerCashFlow(),
+            AktienfinderCellFiller.neutral((as) -> as.stockBewertung().blianzierterGewinn()),
+            AktienfinderCellFiller.neutral((as) -> as.stockBewertung().bereinigterGewinn()),
+            AktienfinderCellFiller.neutral((as) -> as.stockBewertung().operativerCashFlow()),
             // scores
-            (as) -> as.stockFazit().anlagestrategie().dividendenertragsScore(),
-            (as) -> as.stockFazit().anlagestrategie().dividendenwachstumsScore(),
-            (as) -> as.stockFazit().anlagestrategie().gewinnwachstumsScore(),
+            AktienfinderCellFiller.neutral(
+                    (as) -> as.stockFazit().anlagestrategie().dividendenertragsScore()),
+            AktienfinderCellFiller.neutral(
+                    (as) -> as.stockFazit().anlagestrategie().dividendenwachstumsScore()),
+            AktienfinderCellFiller.neutral(
+                    (as) -> as.stockFazit().anlagestrategie().gewinnwachstumsScore()),
             // fazit
-            (as) -> as.stockFazit().geeignet(),
-            (as) -> as.stockFazit().cssColorName());
+            AktienfinderCellFiller.fromBewertung((as) -> as.stockFazit().bewertung()),
+            AktienfinderCellFiller.fromZusammenfassung((as) -> as.stockFazit().zusammenfassung()));
 
     record HeaderGroup(int size, String name) {}
 
@@ -79,7 +85,6 @@ public class ExportService {
                 var os = Files.newOutputStream(
                         outputFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
             CellStyle headerStyle = createHeaderStyle(workbook);
-            CellStyle roundToTwoDigits = roundToTwoDigits(workbook);
 
             Sheet sheet = workbook.createSheet("Aktienfinder");
 
@@ -113,28 +118,7 @@ public class ExportService {
             for (AktienfinderStock afStock : ratings) {
                 Row stockRow = sheet.createRow(sheet.getLastRowNum() + 1);
 
-                for (int col = 0; col < EXTRACTORS.size(); col++) {
-                    Object value = EXTRACTORS.get(col).apply(afStock);
-                    Cell cellByIndex = stockRow.createCell(col);
-                    switch (value) {
-                        case String s -> cellByIndex.setCellValue(s);
-                        case BigDecimal bd -> {
-                            cellByIndex.setCellValue(bd.doubleValue());
-                            cellByIndex.setCellStyle(roundToTwoDigits);
-                        }
-                        case Integer n -> cellByIndex.setCellValue(n.doubleValue());
-                        case Short sh -> cellByIndex.setCellValue(sh);
-                        case Double d -> {
-                            cellByIndex.setCellValue(d);
-                            cellByIndex.setCellStyle(roundToTwoDigits);
-                        }
-                        case Float f -> {
-                            cellByIndex.setCellValue(f);
-                            cellByIndex.setCellStyle(roundToTwoDigits);
-                        }
-                        default -> cellByIndex.setCellValue(value.toString());
-                    }
-                }
+                writeStockRow(afStock, stockRow);
             }
 
             sheet.setAutoFilter(new CellRangeAddress(1, 1, 0, HEADERS.size()));
@@ -145,23 +129,48 @@ public class ExportService {
 
             workbook.write(os);
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOG.error("Problem writing book to [{}].", outputFile, ioException);
         }
+    }
+
+    private static void writeStockRow(AktienfinderStock afStock, Row stockRow) {
+
+        for (int col = 0; col < CELL_FILLERS.size(); col++) {
+            try {
+                writeRowCell(afStock, stockRow, col);
+            } catch (RuntimeException rtEx) {
+                LOG.error("Problem writing cell idx [{}] for share [{}].", col, afStock.stock());
+            }
+        }
+    }
+
+    private static void writeRowCell(AktienfinderStock afStock, Row stockRow, int col) {
+        AktienfinderCellFiller aktienfinderCellFiller = CELL_FILLERS.get(col);
+        Object value = aktienfinderCellFiller.valueExtractor().apply(afStock);
+        Cell cellByIndex = stockRow.createCell(col);
+
+        switch (value) {
+            case String s -> cellByIndex.setCellValue(s);
+            case BigDecimal bd -> cellByIndex.setCellValue(bd.doubleValue());
+            case Integer n -> cellByIndex.setCellValue(n.doubleValue());
+            case Short sh -> cellByIndex.setCellValue(sh);
+            case Double d -> cellByIndex.setCellValue(d);
+            case Float f -> cellByIndex.setCellValue(f);
+            default -> cellByIndex.setCellValue(value.toString());
+        }
+
+        CellStyle style = aktienfinderCellFiller
+                .styler()
+                .apply(afStock, stockRow.getSheet().getWorkbook());
+        cellByIndex.setCellStyle(style);
     }
 
     private CellStyle createHeaderStyle(Workbook workbook) {
         CellStyle cellStyle = workbook.createCellStyle();
         cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        cellStyle.setFillBackgroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        cellStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
         cellStyle.setAlignment(HorizontalAlignment.CENTER);
 
         return cellStyle;
-    }
-
-    private CellStyle roundToTwoDigits(Workbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        style.setDataFormat(workbook.getCreationHelper().createDataFormat().getFormat("0.##"));
-
-        return style;
     }
 }

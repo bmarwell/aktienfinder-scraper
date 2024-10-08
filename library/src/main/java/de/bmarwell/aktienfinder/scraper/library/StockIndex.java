@@ -15,6 +15,8 @@
  */
 package de.bmarwell.aktienfinder.scraper.library;
 
+import de.bmarwell.aktienfinder.scraper.library.download.AbstractWikiDataSockIndexRetriever;
+import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;

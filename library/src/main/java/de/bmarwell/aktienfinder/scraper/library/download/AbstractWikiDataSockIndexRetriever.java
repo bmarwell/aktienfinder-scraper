@@ -13,13 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library;
+package de.bmarwell.aktienfinder.scraper.library.download;
 
+import de.bmarwell.aktienfinder.scraper.library.Stock;
 import java.util.List;
 
-public interface StockIndexStockRetriever {
+public abstract class AbstractWikiDataSockIndexRetriever implements StockIndexStockRetriever {
 
-    String getName();
+    public abstract String getWikiDataQid();
 
-    List<Stock> getStocks();
+    @Override
+    public List<Stock> getStocks() {
+        // TODO: implement
+        throw new UnsupportedOperationException(
+                "not yet implemented: [de.bmarwell.aktienfinder.scraper.library.download.AbstractWikiDataSockIndexRetriever::getStocks].");
+    }
 }

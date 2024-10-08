@@ -15,27 +15,19 @@
  */
 package de.bmarwell.aktienfinder.scraper.library;
 
-import de.bmarwell.aktienfinder.scraper.library.download.AbstractWikiDataSockIndexRetriever;
+import de.bmarwell.aktienfinder.scraper.library.download.DaxScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.NasdaqScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.NikkeiScraper;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 
 /**
  * The source indexes to read stock names and their ISINs from. *
  */
-public enum StockIndex implements StockIndexStockRetriever {
-    NASDAQ_100(new AbstractWikiDataSockIndexRetriever() {
-        @Override
-        public String getWikiDataQid() {
-            return "";
-        }
-
-        @Override
-        public String getName() {
-            return "NASDAQ 100";
-        }
-    });
+public enum StockIndex {
+    DAX(new DaxScraper()),
+    NIKKEI_225(new NikkeiScraper()),
+    NASDAQ_100(new NasdaqScraper());
 
     private final StockIndexStockRetriever stockRetriever;
 
@@ -47,16 +39,7 @@ public enum StockIndex implements StockIndexStockRetriever {
         return List.of(StockIndex.values());
     }
 
-    @Override
-    public String getName() {
-        return "";
-    }
-
-    @Override
-    public List<Stock> getStocks() {
-        return Arrays.stream(values())
-                .map(StockIndexStockRetriever::getStocks)
-                .flatMap(Collection::stream)
-                .toList();
+    public StockIndexStockRetriever getStockRetriever() {
+        return stockRetriever;
     }
 }

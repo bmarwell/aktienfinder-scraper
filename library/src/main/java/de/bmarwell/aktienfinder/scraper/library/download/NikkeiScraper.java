@@ -15,13 +15,17 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.download;
 
-import com.microsoft.playwright.Playwright;
-import de.bmarwell.aktienfinder.scraper.library.Stock;
-import java.util.List;
+import java.net.URI;
 
-public interface StockIndexStockRetriever {
+public class NikkeiScraper extends AbstractBoerseFrankfurtScraper {
 
-    String getName();
+    @Override
+    public URI uri() {
+        return URI.create("https://www.boerse-frankfurt.de/indices/nikkei-225/constituents");
+    }
 
-    List<Stock> getStocks(Playwright blocking);
+    @Override
+    public String getName() {
+        return "Nikkei 225";
+    }
 }

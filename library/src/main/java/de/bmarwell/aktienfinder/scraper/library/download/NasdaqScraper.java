@@ -15,17 +15,17 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.download;
 
-import de.bmarwell.aktienfinder.scraper.library.Stock;
-import java.util.List;
+import java.net.URI;
 
-public abstract class AbstractWikiDataSockIndexRetriever implements StockIndexStockRetriever {
-
-    public abstract String getWikiDataQid();
+public class NasdaqScraper extends AbstractBoerseFrankfurtScraper {
 
     @Override
-    public List<Stock> getStocks() {
-        // TODO: implement
-        throw new UnsupportedOperationException(
-                "not yet implemented: [de.bmarwell.aktienfinder.scraper.library.download.AbstractWikiDataSockIndexRetriever::getStocks].");
+    public URI uri() {
+        return URI.create("https://www.boerse-frankfurt.de/indices/nasdaq-100/constituents");
+    }
+
+    @Override
+    public String getName() {
+        return "NASDAQ 100";
     }
 }

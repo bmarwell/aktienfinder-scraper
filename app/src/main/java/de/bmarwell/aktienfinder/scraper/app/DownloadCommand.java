@@ -15,16 +15,57 @@
  */
 package de.bmarwell.aktienfinder.scraper.app;
 
+import de.bmarwell.aktienfinder.scraper.library.Stock;
+import de.bmarwell.aktienfinder.scraper.library.StockIndex;
+import de.bmarwell.aktienfinder.scraper.library.download.DownloadListService;
+import de.bmarwell.aktienfinder.scraper.library.download.StockDownloadOption;
+import jakarta.json.Json;
+import jakarta.json.JsonArrayBuilder;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonWriter;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 
 @Command(name = "download", header = "Downloads a list of stocks")
 public class DownloadCommand implements Callable<Integer> {
 
+    @Option(
+            names = {"-o", "--output"},
+            description = "Output file (json)")
+    Path outputFile;
+
     @Override
     public Integer call() throws Exception {
-        // TODO: implement
-        throw new UnsupportedOperationException(
-                "not yet implemented: [de.bmarwell.aktienfinder.scraper.app.AktienFinderList::call].");
+        try (DownloadListService downloadListService = new DownloadListService();
+                OutputStream outputStream = Files.newOutputStream(
+                        outputFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                JsonWriter jsonWriter = Json.createWriter(outputStream)) {
+            StockDownloadOption stockDownloadOption = new StockDownloadOption(StockIndex.all(), 9999);
+            List<Stock> stocks = downloadListService.downloadStocks(stockDownloadOption);
+
+            JsonArrayBuilder results = Json.createArrayBuilder();
+
+            for (Stock stock : stocks) {
+                JsonObject result = Json.createObjectBuilder()
+                        .add("name", Json.createValue(stock.name()))
+                        .add("isin", Json.createValue(stock.isin()))
+                        .add("index", Json.createValue(stock.index().orElse("")))
+                        .build();
+                results.add(result);
+            }
+
+            JsonObject result =
+                    Json.createObjectBuilder().add("results", results.build()).build();
+
+            jsonWriter.writeObject(result);
+        }
+
+        return 0;
     }
 }

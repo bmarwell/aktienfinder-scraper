@@ -17,11 +17,21 @@ package de.bmarwell.aktienfinder.scraper.library.download;
 
 import com.microsoft.playwright.Playwright;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
+import java.net.URI;
 import java.util.List;
 
-public interface StockIndexStockRetriever {
+public abstract class AbstractWikipediaStockIndexScraper implements StockIndexStockRetriever {
 
-    String getName();
+    public abstract URI uri();
 
-    List<Stock> getStocks(Playwright blocking);
+    public abstract String tableSelector();
+
+    public abstract int nameColumnIndex();
+
+    @Override
+    public List<Stock> getStocks(Playwright blocking) {
+        // TODO: implement
+        throw new UnsupportedOperationException(
+                "not yet implemented: [de.bmarwell.aktienfinder.scraper.library.download.AbstractWikiDataSockIndexRetriever::getStocks].");
+    }
 }

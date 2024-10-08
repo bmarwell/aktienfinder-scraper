@@ -15,19 +15,48 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.download;
 
+import com.microsoft.playwright.Playwright;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.StockIndex;
+import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache;
+import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.function.Supplier;
 
-public class DownloadListService {
+public class DownloadListService implements AutoCloseable {
+
+    public final PoorMansCache<Playwright> browsers = new PoorMansCache<>(4, playwrightCreator());
+
+    private Supplier<Playwright> playwrightCreator() {
+        return Playwright::create;
+    }
 
     public DownloadListService() {
         // config
     }
 
     public List<Stock> downloadStocks(StockDownloadOption stockDownloadOption) {
-        for (StockIndex stockIndex : stockDownloadOption.stockIndices()) {}
+        List<Stock> stocks = new ArrayList<>();
 
-        return List.of();
+        for (StockIndex stockIndex : stockDownloadOption.stockIndices()) {
+            try (Instance<Playwright> playwrightInstance = browsers.getBlocking()) {
+                Collection<Stock> stocksFromIndex =
+                        stockIndex.getStockRetriever().getStocks(playwrightInstance.instance());
+                stocks.addAll(stocksFromIndex);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // TODO: replace with unique items
+
+        return List.copyOf(stocks);
+    }
+
+    @Override
+    public void close() throws Exception {
+        //
     }
 }

@@ -15,4 +15,4 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.scrape.value;
 
-public record StockBewertung(float blianzierterGewinn, float bereinigterGewinn, float operativerCashFlow) {}
+public record StockBewertung(double blianzierterGewinn, double bereinigterGewinn, double operativerCashFlow) {}

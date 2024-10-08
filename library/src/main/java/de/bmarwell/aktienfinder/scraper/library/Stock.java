@@ -15,4 +15,6 @@
  */
 package de.bmarwell.aktienfinder.scraper.library;
 
-public record Stock(String name, String isin) {}
+import java.util.Optional;
+
+public record Stock(String name, String isin, Optional<String> index) {}

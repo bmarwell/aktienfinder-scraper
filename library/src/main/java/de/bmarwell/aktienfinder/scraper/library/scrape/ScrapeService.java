@@ -111,7 +111,7 @@ public class ScrapeService implements AutoCloseable {
         var stockDataReader = Json.createReader(stockProfile);
         var stockData = stockDataReader.readObject();
 
-        var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"));
+        var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"), Optional.empty());
         var stockBewertung = new StockBewertung(
                 stockData
                         .getJsonNumber("ReportedEpsCorrelation")

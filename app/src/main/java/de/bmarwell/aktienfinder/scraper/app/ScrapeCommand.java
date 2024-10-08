@@ -15,8 +15,10 @@
  */
 package de.bmarwell.aktienfinder.scraper.app;
 
+import de.bmarwell.aktienfinder.scraper.library.export.ExportService;
 import de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -32,13 +34,19 @@ public class ScrapeCommand implements Callable<Integer> {
             split = ",")
     Set<String> stockIsins;
 
+    @Option(
+            names = {"-o", "--output"},
+            description = "Output file (xlsx)")
+    Path outputFile;
+
     @Override
     public Integer call() throws Exception {
-        final var scrapeService = new ScrapeService();
+        try (var scrapeService = new ScrapeService()) {
+            List<AktienfinderStock> ratings = scrapeService.scrapeAll(stockIsins);
 
-        List<AktienfinderStock> ratings = scrapeService.scrapeAll(stockIsins);
-
-        System.out.println(ratings);
+            ExportService exportService = new ExportService();
+            exportService.export(ratings, outputFile);
+        }
 
         return 0;
     }

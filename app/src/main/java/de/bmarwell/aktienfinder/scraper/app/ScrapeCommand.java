@@ -15,13 +15,25 @@
  */
 package de.bmarwell.aktienfinder.scraper.app;
 
+import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.export.ExportService;
 import de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonValue;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -32,7 +44,12 @@ public class ScrapeCommand implements Callable<Integer> {
             names = {"-i", "--stocks"},
             description = "stock isins",
             split = ",")
-    Set<String> stockIsins;
+    Set<String> stockIsins = new HashSet<>();
+
+    @Option(
+            names = {"-f", "--input-file"},
+            description = "input file")
+    Path inputFile;
 
     @Option(
             names = {"-o", "--output"},
@@ -41,8 +58,38 @@ public class ScrapeCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        Set<Stock> stocksFromIsinInput = stockIsins.stream()
+                .map(isin -> new Stock("", isin, Optional.empty()))
+                .collect(Collectors.toSet());
+        Set<Stock> stocksFromFileInput = new HashSet<>();
+
+        if (inputFile != null) {
+            try (InputStream fileInputStream = Files.newInputStream(inputFile, StandardOpenOption.READ);
+                    var json = Json.createReader(fileInputStream)) {
+                JsonObject root = json.readObject();
+                JsonArray results = root.getJsonArray("results");
+                for (JsonValue result : results) {
+                    if (!JsonValue.ValueType.OBJECT.equals(result.getValueType())) {
+                        continue;
+                    }
+
+                    JsonObject stockObject = result.asJsonObject();
+
+                    Stock stock = new Stock(
+                            stockObject.getString("name"),
+                            stockObject.getString("isin"),
+                            Optional.ofNullable(stockObject.getString("index")));
+
+                    stocksFromFileInput.add(stock);
+                }
+            }
+        }
+
+        var allStocks = Stream.concat(stocksFromIsinInput.stream(), stocksFromFileInput.stream())
+                .collect(Collectors.toSet());
+
         try (var scrapeService = new ScrapeService()) {
-            List<AktienfinderStock> ratings = scrapeService.scrapeAll(stockIsins);
+            List<AktienfinderStock> ratings = scrapeService.scrapeAll(allStocks);
 
             ExportService exportService = new ExportService();
             exportService.export(ratings, outputFile);

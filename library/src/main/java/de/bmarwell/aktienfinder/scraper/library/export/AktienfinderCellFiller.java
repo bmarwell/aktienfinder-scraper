@@ -82,6 +82,7 @@ public record AktienfinderCellFiller(
         switch (bewertung) {
             case "stark unterbewertet" -> cellStyle.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());
             case "unterbewertet" -> cellStyle.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());
+            case "leicht unterbewertet" -> cellStyle.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());
             case "fair bewertet" -> cellStyle.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());
             case "leicht überbewertet" -> cellStyle.setFillForegroundColor(IndexedColors.RED.getIndex());
             case "überbewertet" -> cellStyle.setFillForegroundColor(IndexedColors.RED.getIndex());

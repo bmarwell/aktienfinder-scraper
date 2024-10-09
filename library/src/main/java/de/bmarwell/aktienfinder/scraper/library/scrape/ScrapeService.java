@@ -33,6 +33,7 @@ import de.bmarwell.aktienfinder.scraper.library.scrape.value.Anlagestrategie;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockBewertung;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockFazit;
 import jakarta.json.Json;
+import jakarta.json.JsonNumber;
 import jakarta.json.JsonValue;
 import jakarta.json.JsonValue.ValueType;
 import java.io.ByteArrayInputStream;
@@ -63,12 +64,12 @@ public class ScrapeService implements AutoCloseable {
     private final PoorMansCache<Playwright> browserCache =
             new PoorMansCache<>(ExecutorHelper.getNumberThreads(), this::createPlaywright);
 
-    public List<AktienfinderStock> scrapeAll(Set<String> stockIsins) {
+    public List<AktienfinderStock> scrapeAll(Set<Stock> stockIsins) {
         var resultList = new ArrayList<AktienfinderStock>();
         var threads = new ArrayList<Future<Optional<AktienfinderStock>>>();
 
-        for (String stockIsin : stockIsins) {
-            var scraperThread = executor.submit(() -> this.scrape(stockIsin));
+        for (Stock stock : stockIsins) {
+            var scraperThread = executor.submit(() -> this.scrape(stock));
             threads.add(scraperThread);
         }
 
@@ -84,8 +85,8 @@ public class ScrapeService implements AutoCloseable {
         return List.copyOf(resultList);
     }
 
-    private Optional<AktienfinderStock> scrape(String stockIsin) {
-        Optional<URI> scrapeUrl = getCanonicalDataUrl(stockIsin);
+    private Optional<AktienfinderStock> scrape(Stock inSock) {
+        Optional<URI> scrapeUrl = getCanonicalDataUrl(inSock);
 
         if (scrapeUrl.isEmpty()) {
             return Optional.empty();
@@ -101,15 +102,15 @@ public class ScrapeService implements AutoCloseable {
             BrowserType browserType = playwrightInstance.instance().chromium();
 
             try (Browser browser = browserType.launch()) {
-                loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
+                loadAndPopulate(inSock, browser, xhrResponses, canonicalDataUrl);
 
                 // retry
                 if (xhrResponses.get("StockProfile") == null) {
-                    loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
+                    loadAndPopulate(inSock, browser, xhrResponses, canonicalDataUrl);
                 }
                 // retry 2
                 if (xhrResponses.get("Scorings") == null) {
-                    loadAndPopulate(stockIsin, browser, xhrResponses, canonicalDataUrl);
+                    loadAndPopulate(inSock, browser, xhrResponses, canonicalDataUrl);
                 }
             }
         } catch (Exception autoCloseEx) {
@@ -117,7 +118,7 @@ public class ScrapeService implements AutoCloseable {
         }
 
         if (xhrResponses.get("StockProfile") == null) {
-            LOG.warn("empty StockProfile for stockIsin [{}]", stockIsin);
+            LOG.warn("empty StockProfile for stockIsin [{}]", inSock);
             return Optional.empty();
         }
 
@@ -127,17 +128,34 @@ public class ScrapeService implements AutoCloseable {
         var stockDataReader = Json.createReader(stockProfile);
         var stockData = stockDataReader.readObject();
 
-        var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"), Optional.empty());
-        var stockBewertung = new StockBewertung(
-                stockData
-                        .getJsonNumber("ReportedEpsCorrelation")
-                        .bigDecimalValue()
-                        .floatValue(),
-                stockData
-                        .getJsonNumber("AdjustedEpsCorrelation")
-                        .bigDecimalValue()
-                        .floatValue(),
-                stockData.getJsonNumber("OcfCorrelation").bigDecimalValue().floatValue());
+        var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"), inSock.index());
+        double bilGewinn = -1;
+        double bereinigterGewinn = -1;
+        double operativerCashFlow = -1;
+
+        if (stockData.get("ReportedEpsCorrelation") instanceof JsonNumber bilGewinnJson) {
+            bilGewinn = bilGewinnJson.bigDecimalValue().doubleValue();
+        } else {
+            LOG.warn(
+                    "StockProfile does not contain ReportedEpsCorrelation: [{}]",
+                    stockData.get("ReportedEpsCorrelation"));
+        }
+
+        if (stockData.get("AdjustedEpsCorrelation") instanceof JsonNumber bereinigterGewinnJson) {
+            bereinigterGewinn = bereinigterGewinnJson.bigDecimalValue().doubleValue();
+        } else {
+            LOG.warn(
+                    "StockProfile does not contain AdjustedEpsCorrelation: [{}]",
+                    stockData.get("AdjustedEpsCorrelation"));
+        }
+
+        if (stockData.get("OcfCorrelation") instanceof JsonNumber operativerCashFlowJson) {
+            operativerCashFlow = operativerCashFlowJson.bigDecimalValue().doubleValue();
+        } else {
+            LOG.warn("StockProfile does not contain OcfCorrelation: [{}]", stockData.get("OcfCorrelation"));
+        }
+
+        var stockBewertung = new StockBewertung(bilGewinn, bereinigterGewinn, operativerCashFlow);
 
         // https://dividendenfinder.de/Securities/1112/Scorings
         Anlagestrategie anlagestrategie;
@@ -193,14 +211,14 @@ public class ScrapeService implements AutoCloseable {
     }
 
     private static void loadAndPopulate(
-            String stockIsin, Browser browser, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
+            Stock inStock, Browser browser, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
         BrowserContext context = browser.newContext();
         Page page = context.newPage();
         page.onDOMContentLoaded(pageContent -> LOG.info("loaded: [{}]", pageContent.url()));
         var navigateOptions = new NavigateOptions();
         navigateOptions.setTimeout(10_000L);
         context.onResponse(response -> {
-            LOG.debug("loaded data: [{}] for ISIN [{}].", response.url(), stockIsin);
+            LOG.debug("loaded data: [{}] for ISIN [{}].", response.url(), inStock.isin());
 
             if (response.url().endsWith("Scorings")) {
                 xhrResponses.put("Scorings", response.text());
@@ -231,58 +249,76 @@ public class ScrapeService implements AutoCloseable {
             return;
         }
 
-        try {
-            var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
-
-            if (aktieKaufHeading != null) {
-                DomHelper.tryScrollIntoView(aktieKaufHeading);
+        boolean errorOccurred;
+        for (int tries = 0; tries < 3; tries++) {
+            try {
+                parseBewertungZusammenfassung(xhrResponses, page);
+                errorOccurred = false;
+            } catch (PlaywrightException pe) {
+                LOG.error(
+                        "Problem loading fazit for ISIN [{}], URL = [{}], message = [{}].",
+                        inStock,
+                        canonicalDataUrl,
+                        pe.getMessage());
+                LOG.trace("Problem loading fazit for ISIN [{}], URL = [{}].", inStock, canonicalDataUrl, pe);
+                errorOccurred = true;
             }
 
-            var stockProfileSummary = page.querySelector(".stockprofile__summary_conclusion_row");
-
-            if (stockProfileSummary != null) {
-                DomHelper.tryScrollIntoView(stockProfileSummary);
+            if (!errorOccurred) {
+                break;
             }
-
-            var summaryInner = page.querySelector("div.stockprofile span.stockprofile__summary_row__inner");
-
-            if (summaryInner != null) {
-                xhrResponses.put(BEWERTUNG, summaryInner.innerText().strip());
-            }
-
-            var conclusionRow = page.querySelector(".stockprofile__summary_conclusion_row");
-
-            if (conclusionRow != null) {
-                String summaryClass = conclusionRow.getAttribute("class");
-
-                if (summaryClass != null && summaryClass.contains("background--negative")) {
-                    xhrResponses.put(ZUSAMMENFASSUNG, "negative");
-                }
-
-                if (summaryClass != null && summaryClass.contains("background--negative-light")) {
-                    xhrResponses.put(ZUSAMMENFASSUNG, "negative-light");
-                }
-
-                if (summaryClass != null && summaryClass.contains("background--neutral-light")) {
-                    xhrResponses.put(ZUSAMMENFASSUNG, "neutral-light");
-                }
-
-                if (summaryClass != null && summaryClass.contains("background--positive")) {
-                    xhrResponses.put(ZUSAMMENFASSUNG, "positive");
-                }
-
-                if (summaryClass != null && summaryClass.contains("background--positive-light")) {
-                    xhrResponses.put(ZUSAMMENFASSUNG, "positive-light");
-                }
-            }
-
-        } catch (PlaywrightException pe) {
-            LOG.error("Problem loading fazit for ISIN [{}], URL = [{}].", stockIsin, canonicalDataUrl, pe);
         }
     }
 
-    private static Optional<URI> getCanonicalDataUrl(String stockIsin) {
-        var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/" + stockIsin.strip());
+    private static void parseBewertungZusammenfassung(HashMap<String, String> xhrResponses, Page page) {
+        var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
+
+        if (aktieKaufHeading != null) {
+            DomHelper.tryScrollIntoView(aktieKaufHeading);
+        }
+
+        var stockProfileSummary = page.querySelector(".stockprofile__summary_conclusion_row");
+
+        if (stockProfileSummary != null) {
+            DomHelper.tryScrollIntoView(stockProfileSummary);
+        }
+
+        var summaryInner = page.querySelector("div.stockprofile span.stockprofile__summary_row__inner");
+
+        if (summaryInner != null) {
+            xhrResponses.put(BEWERTUNG, summaryInner.innerText().strip());
+        }
+
+        var conclusionRow = page.querySelector(".stockprofile__summary_conclusion_row");
+
+        if (conclusionRow != null) {
+            String summaryClass = conclusionRow.getAttribute("class");
+
+            if (summaryClass != null && summaryClass.contains("background--negative")) {
+                xhrResponses.put(ZUSAMMENFASSUNG, "negative");
+            }
+
+            if (summaryClass != null && summaryClass.contains("background--negative-light")) {
+                xhrResponses.put(ZUSAMMENFASSUNG, "negative-light");
+            }
+
+            if (summaryClass != null && summaryClass.contains("background--neutral-light")) {
+                xhrResponses.put(ZUSAMMENFASSUNG, "neutral-light");
+            }
+
+            if (summaryClass != null && summaryClass.contains("background--positive")) {
+                xhrResponses.put(ZUSAMMENFASSUNG, "positive");
+            }
+
+            if (summaryClass != null && summaryClass.contains("background--positive-light")) {
+                xhrResponses.put(ZUSAMMENFASSUNG, "positive-light");
+            }
+        }
+    }
+
+    private static Optional<URI> getCanonicalDataUrl(Stock stock) {
+        var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/"
+                + stock.isin().strip());
 
         try (Playwright playwright = Playwright.create()) {
             BrowserType browserType = playwright.chromium();
@@ -316,7 +352,7 @@ public class ScrapeService implements AutoCloseable {
                 var resultItem = jsonReader.readObject().asJsonObject();
                 var resultIsin = resultItem.getString("Isin");
 
-                if (stockIsin.equals(resultIsin)) {
+                if (stock.isin().equals(resultIsin)) {
                     var securityName = resultItem.getString("Name");
                     String urlSafeStockName = URLEncoder.encode(securityName, StandardCharsets.UTF_8)
                             .replaceAll("\\+", "%20");
@@ -328,7 +364,7 @@ public class ScrapeService implements AutoCloseable {
         } catch (RuntimeException httpEx) {
             LOG.error(
                     "unable to retrieve aktien name for ISIN [{}], URL=[{}], unknown error.",
-                    stockIsin,
+                    stock.isin(),
                     searchUri,
                     httpEx);
             return Optional.empty();

@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class TecDaxScraper extends AbstractBoerseFrankfurtScraper {
+public class TecDaxScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/tecdax-kursindex/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/DE0007203275");
     }
 
     @Override

@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class NasdaqScraper extends AbstractBoerseFrankfurtScraper {
+public class NasdaqScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/nasdaq-100/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/DE000GVENDX7");
     }
 
     @Override

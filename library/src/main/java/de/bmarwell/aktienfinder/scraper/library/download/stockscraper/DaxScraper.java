@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class DaxScraper extends AbstractBoerseFrankfurtScraper {
+public class DaxScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/dax-kursindex/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/DE000GVEDAX4");
     }
 
     @Override

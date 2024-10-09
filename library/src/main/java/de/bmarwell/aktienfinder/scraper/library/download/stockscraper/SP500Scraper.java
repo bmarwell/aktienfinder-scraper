@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class SP500Scraper extends AbstractBoerseFrankfurtScraper {
+public class SP500Scraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/s-p-500/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/DE000GVESPX0");
     }
 
     @Override

@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class NikkeiScraper extends AbstractBoerseFrankfurtScraper {
+public class NikkeiScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/nikkei-225/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/JP9010C00002");
     }
 
     @Override

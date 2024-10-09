@@ -17,11 +17,4 @@ package de.bmarwell.aktienfinder.scraper.library.download;
 
 import java.util.List;
 
-public record StockDownloadOption(List<StockIndex> stockIndices, int resultsPerSource) {
-
-    private static final int RESULTS_PER_SOURCE = 100;
-
-    static StockDownloadOption all() {
-        return new StockDownloadOption(StockIndex.all(), RESULTS_PER_SOURCE);
-    }
-}
+public record StockDownloadOption(List<StockIndex> stockIndices, int resultsPerSource) {}

@@ -20,7 +20,6 @@ import static de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService.Resp
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
 import com.microsoft.playwright.Playwright;
@@ -99,18 +98,19 @@ public class ScrapeService implements AutoCloseable {
         xhrResponses.put(ZUSAMMENFASSUNG, "neutral");
 
         try (Instance<Playwright> playwrightInstance = this.browserCache.getBlocking()) {
-            BrowserType browserType = playwrightInstance.instance().chromium();
+            Playwright playwright = playwrightInstance.instance();
 
-            try (Browser browser = browserType.launch()) {
-                loadAndPopulate(inSock, browser, xhrResponses, canonicalDataUrl);
+            try (Browser browser = playwright.chromium().launch();
+                    BrowserContext browserContext = browser.newContext()) {
+                loadAndPopulate(inSock, browserContext, xhrResponses, canonicalDataUrl);
 
                 // retry
                 if (xhrResponses.get("StockProfile") == null) {
-                    loadAndPopulate(inSock, browser, xhrResponses, canonicalDataUrl);
+                    loadAndPopulate(inSock, browserContext, xhrResponses, canonicalDataUrl);
                 }
                 // retry 2
                 if (xhrResponses.get("Scorings") == null) {
-                    loadAndPopulate(inSock, browser, xhrResponses, canonicalDataUrl);
+                    loadAndPopulate(inSock, browserContext, xhrResponses, canonicalDataUrl);
                 }
             }
         } catch (Exception autoCloseEx) {
@@ -169,7 +169,7 @@ public class ScrapeService implements AutoCloseable {
                 new StockFazit(anlagestrategie, xhrResponses.get(BEWERTUNG), xhrResponses.get(ZUSAMMENFASSUNG));
         var aktienfinderStock = new AktienfinderStock(stock, stockBewertung, stockFazit);
 
-        LOG.info("Stock: [{}].", aktienfinderStock);
+        LOG.debug("Aktienfinder Stock: [{}].", aktienfinderStock);
 
         return Optional.of(aktienfinderStock);
     }
@@ -211,10 +211,9 @@ public class ScrapeService implements AutoCloseable {
     }
 
     private static void loadAndPopulate(
-            Stock inStock, Browser browser, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
-        BrowserContext context = browser.newContext();
+            Stock inStock, BrowserContext context, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
         Page page = context.newPage();
-        page.onDOMContentLoaded(pageContent -> LOG.info("loaded: [{}]", pageContent.url()));
+        page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));
         var navigateOptions = new NavigateOptions();
         navigateOptions.setTimeout(10_000L);
         context.onResponse(response -> {
@@ -321,8 +320,7 @@ public class ScrapeService implements AutoCloseable {
                 + stock.isin().strip());
 
         try (Playwright playwright = Playwright.create()) {
-            BrowserType browserType = playwright.chromium();
-            try (Browser browser = browserType.launch()) {
+            try (Browser browser = playwright.chromium().launch()) {
                 BrowserContext context = browser.newContext();
                 Page page = context.newPage();
                 var navigateOptions = new NavigateOptions();
@@ -332,15 +330,11 @@ public class ScrapeService implements AutoCloseable {
                 navResponse.finished();
 
                 if (navResponse.status() != 200) {
-                    LOG.warn("could not retrieve result of [{}], http status = [{}]", searchUri, navResponse.status());
-
                     var bodyOut = new ByteArrayOutputStream();
                     bodyOut.writeBytes(navResponse.body());
                     var errorBody = bodyOut.toString(StandardCharsets.UTF_8);
 
-                    var headers = navResponse.headers();
-
-                    LOG.warn("Reason: [{}], [{}]", errorBody, headers);
+                    LOG.warn("could not retrieve result of [{}], http status = [{}], body = [{}]", searchUri, navResponse.status(), errorBody);
 
                     return Optional.empty();
                 }

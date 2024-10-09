@@ -20,13 +20,13 @@ import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.DaxScraper
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.DowJonesScraper;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.EuroStoxxIndex;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.MDaxScraper;
+import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.MsciSouthEastAsiaScraper;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.NasdaqScraper;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.NikkeiScraper;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.SDaxScraper;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.SP500Scraper;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.SpTsxCompositeIndex;
 import de.bmarwell.aktienfinder.scraper.library.download.stockscraper.TopixIndex;
-import java.util.List;
 
 /**
  * The source indexes to read stock names and their ISINs from. *
@@ -42,18 +42,13 @@ public enum StockIndex {
     SDAX(new SDaxScraper()),
     SP500(new SP500Scraper()),
     SP_TSX_COMPOSITE(new SpTsxCompositeIndex()),
-    // MSCI_AC_ASEAN(new MsciSouthEastAsiaScraper()),
-    TOPIX(new TopixIndex())
-    ;
+    MSCI_AC_ASEAN(new MsciSouthEastAsiaScraper()),
+    TOPIX(new TopixIndex());
 
     private final StockIndexStockRetriever stockRetriever;
 
     StockIndex(StockIndexStockRetriever stockIndexStockRetriever) {
         this.stockRetriever = stockIndexStockRetriever;
-    }
-
-    public static List<StockIndex> all() {
-        return List.of(StockIndex.values());
     }
 
     public StockIndexStockRetriever getStockRetriever() {

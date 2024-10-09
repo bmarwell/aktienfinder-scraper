@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class SDaxScraper extends AbstractBoerseFrankfurtScraper {
+public class SDaxScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/sdax-kursindex/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/sdax-index-DE0009653386");
     }
 
     @Override

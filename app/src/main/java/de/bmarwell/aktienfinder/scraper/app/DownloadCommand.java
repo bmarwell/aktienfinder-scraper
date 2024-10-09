@@ -27,10 +27,10 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -44,16 +44,23 @@ public class DownloadCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        try (DownloadListService downloadListService = new DownloadListService();
-                OutputStream outputStream = Files.newOutputStream(
-                        outputFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                JsonWriter jsonWriter = Json.createWriter(outputStream)) {
+        Set<Stock> stockSet = new LinkedHashSet<>();
+
+        try (DownloadListService downloadListService = new DownloadListService()) {
             var indexes = List.of(StockIndex.values());
             StockDownloadOption stockDownloadOption = new StockDownloadOption(indexes, 9999);
             List<Stock> stocks = downloadListService.downloadStocks(stockDownloadOption);
 
-            Set<Stock> stockSet = stocks.stream().collect(Collectors.toUnmodifiableSet());
+            stockSet.addAll(stocks);
+        }
 
+        if (stockSet.isEmpty()) {
+            return 1;
+        }
+
+        try (OutputStream outputStream = Files.newOutputStream(
+                        outputFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                JsonWriter jsonWriter = Json.createWriter(outputStream)) {
             JsonArrayBuilder results = Json.createArrayBuilder();
 
             for (Stock stock : stockSet) {

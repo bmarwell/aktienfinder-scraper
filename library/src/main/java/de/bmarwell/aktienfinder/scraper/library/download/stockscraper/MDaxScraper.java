@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class MDaxScraper extends AbstractBoerseFrankfurtScraper {
+public class MDaxScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/mdax-kursindex/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/mdax-index-DE0008467416");
     }
 
     @Override

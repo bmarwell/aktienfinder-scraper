@@ -17,11 +17,11 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
-public class DowJonesScraper extends AbstractBoerseFrankfurtScraper {
+public class DowJonesScraper extends AbstractComDirectScraper {
 
     @Override
     public URI uri() {
-        return URI.create("https://www.boerse-frankfurt.de/indices/dow-jones-industrial/constituents");
+        return URI.create("https://www.comdirect.de/inf/indizes/werte/DE000GVEDJI6");
     }
 
     @Override

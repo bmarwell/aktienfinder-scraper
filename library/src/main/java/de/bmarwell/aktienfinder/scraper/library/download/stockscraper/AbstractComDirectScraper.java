@@ -16,6 +16,7 @@
 package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.ElementHandle;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
@@ -24,7 +25,6 @@ import com.microsoft.playwright.options.ElementState;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import de.bmarwell.aktienfinder.scraper.library.scrape.DomHelper;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -32,20 +32,27 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class AbstractComDirectScraper implements StockIndexStockRetriever {
+public abstract class AbstractComDirectScraper extends AbstractPaginatableScraper implements StockIndexStockRetriever {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractComDirectScraper.class);
 
     private static final Pattern ISIN_EXTRACTOR = Pattern.compile("/inf/aktien/([a-zA-Z0-9]+)$");
 
-    public abstract URI uri();
+    private static final Pattern PAGINATION_EVENT_PATTERN =
+            Pattern.compile(".*/inf/indizes/detail/werte/standard.html.*");
+
+    @Override
+    Pattern getPaginationEventPattern() {
+        return PAGINATION_EVENT_PATTERN;
+    }
 
     @Override
     public List<Stock> getStocks(Playwright blocking) {
         List<Stock> stocks = new ArrayList<>();
 
-        try (Browser browser = blocking.chromium().launch()) {
-            Page page = browser.newPage();
+        try (Browser browser = blocking.chromium().launch();
+                BrowserContext context = browser.newContext()) {
+            Page page = context.newPage();
             Response navigation = page.navigate(uri().toString());
             navigation.finished();
 
@@ -55,20 +62,27 @@ public abstract class AbstractComDirectScraper implements StockIndexStockRetriev
 
             ElementHandle nextArrow = null;
             int pageNumber = 0;
+
             do {
+                pageNumber++;
+
                 if (nextArrow != null) {
-                    DomHelper.tryScrollIntoView(nextArrow);
-                    nextArrow.click();
+                    boolean pageAdvanced = tryAdvancePage(nextArrow, page, pageNumber);
+                    if (!pageAdvanced) {
+                        break;
+                    }
                 }
 
                 acceptCookies(page);
 
-                pageNumber++;
-
-                LOG.debug("Reading from page #{}", pageNumber);
+                LOG.debug("Reading from page #{} of Index [{}]", pageNumber, getName());
                 extractFromCurrentPage(page, stocks);
 
-                nextArrow = page.querySelector("div.pagination__button.pagination__button--right a");
+                nextArrow = page.locator("div.pagination__button.pagination__button--right a").elementHandles().stream()
+                        .filter(ElementHandle::isVisible)
+                        .filter(ElementHandle::isEnabled)
+                        .findFirst()
+                        .orElse(null);
             } while (nextArrow != null && nextArrow.asElement().isEnabled());
         }
 

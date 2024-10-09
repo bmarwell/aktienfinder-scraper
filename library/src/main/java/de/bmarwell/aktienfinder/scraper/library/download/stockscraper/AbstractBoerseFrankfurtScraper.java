@@ -17,10 +17,10 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.ElementHandle;
+import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
-import com.microsoft.playwright.options.ElementState;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import de.bmarwell.aktienfinder.scraper.library.scrape.DomHelper;
@@ -74,14 +74,13 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
     }
 
     private void extractFromCurrentPage(Page page, List<Stock> stocks) {
-        ElementHandle mainTable = page.querySelector("table");
-        DomHelper.tryScrollIntoView(mainTable);
+        Locator mainTableBody = page.locator("table tbody");
+        ElementHandle mainTableBodyHandle = mainTableBody.elementHandle();
+        DomHelper.tryScrollIntoView(mainTableBodyHandle);
 
-        mainTable.querySelector("tbody").waitForElementState(ElementState.VISIBLE);
-
-        for (ElementHandle tbodyTr : mainTable.querySelectorAll("tbody tr")) {
+        for (ElementHandle tbodyTr : mainTableBodyHandle.querySelectorAll("tbody tr")) {
             List<ElementHandle> stock = tbodyTr.querySelectorAll("td");
-            String stockName = stock.get(0).innerText();
+            String stockName = stock.getFirst().innerText();
             String chartUrl = stock.get(11).querySelector("img").getAttribute("src");
             String query = URI.create(chartUrl).getQuery();
             Matcher matcher = ISIN_EXTRACTOR.matcher(query);

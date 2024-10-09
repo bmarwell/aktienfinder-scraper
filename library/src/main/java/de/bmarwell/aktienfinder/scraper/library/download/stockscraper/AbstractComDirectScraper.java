@@ -28,16 +28,15 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockRetriever {
+public abstract class AbstractComDirectScraper implements StockIndexStockRetriever {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AbstractBoerseFrankfurtScraper.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractComDirectScraper.class);
 
-    private static final Pattern ISIN_EXTRACTOR = Pattern.compile("&isin=([a-zA-Z0-9]+)&");
+    private static final Pattern ISIN_EXTRACTOR = Pattern.compile("/inf/aktien/([a-zA-Z0-9]+)$");
 
     public abstract URI uri();
 
@@ -52,6 +51,8 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
 
             LOG.debug("navigated to: [{}]  with status code = [{}]", uri(), navigation.status());
 
+            acceptCookies(page);
+
             ElementHandle nextArrow = null;
             int pageNumber = 0;
             do {
@@ -60,40 +61,59 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
                     nextArrow.click();
                 }
 
+                acceptCookies(page);
+
                 pageNumber++;
 
                 LOG.debug("Reading from page #{}", pageNumber);
                 extractFromCurrentPage(page, stocks);
 
-                nextArrow = page.querySelector(
-                        "app-page-bar div.page-bar-row div.ng-star-inserted button.page-bar-type-button.btn.btn-lg span.icon-arrow-step-right-grey-big");
+                nextArrow = page.querySelector("div.pagination__button.pagination__button--right a");
             } while (nextArrow != null && nextArrow.asElement().isEnabled());
         }
 
         return List.copyOf(stocks);
     }
 
-    private void extractFromCurrentPage(Page page, List<Stock> stocks) {
-        ElementHandle mainTable = page.querySelector("table");
-        DomHelper.tryScrollIntoView(mainTable);
+    private void acceptCookies(Page page) {
+        var privacyAcceptButton = page.querySelector("button#privacy-init-wall-button-accept");
+        if (privacyAcceptButton == null) {
+            return;
+        }
 
+        if (privacyAcceptButton.isVisible() && privacyAcceptButton.isEnabled()) {
+            DomHelper.tryScrollIntoView(privacyAcceptButton);
+            privacyAcceptButton.click();
+        }
+    }
+
+    private void extractFromCurrentPage(Page page, List<Stock> stocks) {
+        ElementHandle mainTable = page.querySelector("table.table--comparison");
+        DomHelper.tryScrollIntoView(mainTable);
         mainTable.querySelector("tbody").waitForElementState(ElementState.VISIBLE);
 
         for (ElementHandle tbodyTr : mainTable.querySelectorAll("tbody tr")) {
-            List<ElementHandle> stock = tbodyTr.querySelectorAll("td");
-            String stockName = stock.get(0).innerText();
-            String chartUrl = stock.get(11).querySelector("img").getAttribute("src");
-            String query = URI.create(chartUrl).getQuery();
-            Matcher matcher = ISIN_EXTRACTOR.matcher(query);
-            boolean found = matcher.find();
+            ElementHandle stockNameCol = tbodyTr.querySelector("td[data-label=\"Name\"] a");
 
-            if (!found) {
+            if (stockNameCol == null) {
                 continue;
             }
 
-            String isin = matcher.group(1);
+            String href = stockNameCol.getAttribute("href");
 
-            stocks.add(new Stock(stockName, isin, Optional.of(getName())));
+            if (href == null) {
+                continue;
+            }
+
+            var matcher = ISIN_EXTRACTOR.matcher(href);
+            if (!matcher.find()) {
+                continue;
+            }
+
+            var isin = matcher.group(1);
+
+            Stock stock = new Stock(stockNameCol.innerText(), isin, Optional.of(getName()));
+            stocks.add(stock);
         }
     }
 }

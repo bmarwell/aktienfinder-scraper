@@ -23,24 +23,46 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * The {@code PoorMansCache} class is a simple thread-safe cache implementation
+ * that limits the number of instances created and manages a pool of reusable instances.
+ *
+ * @param <T> the type of objects being cached
+ *
+ * <p>This class implements {@code AutoCloseable} to ensure that resources are properly released
+ * when the cache is no longer needed.</p>
+ *
+ * <p>Instances of this cache are created with a maximum size and a {@code Supplier} which is used
+ * to create new instances when needed. The cache manages two lists: one for available instances and
+ * one for used instances. If the number of total instances is less than the maximum size and no instances
+ * are available, a new instance is created using the supplied {@code Supplier}.</p>
+ *
+ * <p>&quot;PoorMans&quot; in the class name PoorMansCache signifies that this class provides a simple,
+ * minimalistic implementation of a cache. It is a lightweight and basic solution designed
+ * for straightforward caching needs without the complexities
+ * and features of more sophisticated cache systems.</p>
+ */
 public class PoorMansCache<T> implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(PoorMansCache.class);
 
-    private static AtomicInteger creationCounter = new AtomicInteger();
+    private static final AtomicInteger creationCounter = new AtomicInteger();
+    private static final Duration DEFAULT_BLOCKING_TIMEOUT = Duration.ofSeconds(10L);
+    private static final Duration DEFAULT_BLOCKING_POLLING = Duration.ofMillis(500L);
 
     private final int maxSize;
     private final Supplier<T> supplier;
 
     private final List<Instance<T>> availableInstances = Collections.synchronizedList(new ArrayList<>());
     private final List<Instance<T>> usedInstances = Collections.synchronizedList(new ArrayList<>());
-    private boolean interrupted = false;
+    private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     public PoorMansCache(int maxSize, Supplier<T> supplier) {
         this.maxSize = maxSize;
@@ -48,7 +70,7 @@ public class PoorMansCache<T> implements AutoCloseable {
     }
 
     public synchronized Instance<T> get() {
-        if (this.interrupted) {
+        if (this.interrupted.get()) {
             return null;
         }
 
@@ -86,7 +108,7 @@ public class PoorMansCache<T> implements AutoCloseable {
             try {
                 TimeUnit.MILLISECONDS.sleep(waitTime.toMillis());
             } catch (InterruptedException interruptedException) {
-                this.interrupted = true;
+                this.interrupted.set(true);
                 Thread.currentThread().interrupt();
                 throw interruptedException;
             }
@@ -102,7 +124,7 @@ public class PoorMansCache<T> implements AutoCloseable {
     }
 
     public Instance<T> getBlocking() throws TimeoutException, InterruptedException {
-        return getBlocking(Duration.ofSeconds(10L), Duration.ofMillis(500L));
+        return getBlocking(DEFAULT_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_POLLING);
     }
 
     InstanceImpl<T> createInstance() {
@@ -114,21 +136,25 @@ public class PoorMansCache<T> implements AutoCloseable {
         return new InstanceImpl<>(object, instanceNumber, now, this::closeInstance);
     }
 
-    void closeInstance(Instance<T> instance) {
+    synchronized void closeInstance(Instance<T> instance) {
         this.usedInstances.remove(instance);
         this.availableInstances.add(instance);
     }
 
-    protected void cleanUpOld() {
-        if (this.interrupted) {
+    synchronized void cleanUpOld() {
+        if (this.interrupted.get()) {
             return;
         }
 
         this.availableInstances.removeIf(i -> {
-            InstanceImpl<T> instance = (InstanceImpl<T>) i;
-            Instant fiveMinutesAgo = Instant.now().minusSeconds(300L);
+            if (i instanceof InstanceImpl<?> instance) {
+                Instant fiveMinutesAgo = Instant.now().minusSeconds(300L);
 
-            return instance.createdOn.isAfter(fiveMinutesAgo);
+                return instance.createdOn.isBefore(fiveMinutesAgo);
+            }
+
+            // should never not contain an object other than InstanceImpl.
+            return true;
         });
     }
 

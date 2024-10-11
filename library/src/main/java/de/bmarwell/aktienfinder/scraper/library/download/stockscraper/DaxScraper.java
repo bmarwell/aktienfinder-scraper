@@ -17,6 +17,17 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
+/**
+ * A scraper implementation for retrieving stock data from the DAX index using ComDirect's website.
+ *
+ * <p>This class extends {@link AbstractComDirectScraper} and provides
+ * the specific URI for the DAX index and its name. The {@code uri} method
+ * returns the URL specific to the DAX index, and the {@code getName} method
+ * returns "DAX".
+ *
+ * <p>It uses the inherited functionality to navigate through paginated content,
+ * accept cookies, and extract stock data.
+ */
 public class DaxScraper extends AbstractComDirectScraper {
 
     @Override

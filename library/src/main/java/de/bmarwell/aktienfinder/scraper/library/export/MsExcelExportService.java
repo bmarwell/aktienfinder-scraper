@@ -17,6 +17,7 @@ package de.bmarwell.aktienfinder.scraper.library.export;
 
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -34,9 +35,33 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ExportService {
+/**
+ * {@code MsExcelExportService} is a service class responsible for exporting data into an
+ * Excel file (.xlsx format) using Apache POI library. This service organizes data into
+ * specified headers and header groups, and writes the data into corresponding cells.
+ *
+ * <p>This class maintains predefined headers and their respective groupings, each containing a
+ * size and a name. It leverages {@code AktienfinderCellFiller} for dynamic cell content population
+ * and styling.</p>
+ *
+ * <p>The primary method {@code export} accepts a list of {@code AktienfinderStock} objects and a
+ * {@code Path} for the output Excel file. It writes the data into the Excel sheet, including
+ * styled headers and auto-sized columns.</p>
+ *
+ * <p>Note: Make sure to handle {@code IOException} appropriately when calling the {@code export} method.</p>
+ *
+ * <p>Methods summary:
+ * <ul>
+ *   <li>{@code export}: Exports provided stock data to an Excel file.
+ *   <li>{@code writeStockRow}: Writes a row of stock data into the Excel sheet.
+ *   <li>{@code writeRowCell}: Writes an individual cell within the stock row.
+ *   <li>{@code createHeaderStyle}: Creates and returns a cell style for headers.
+ * </ul>
+ * </p>
+ */
+public class MsExcelExportService {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ExportService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MsExcelExportService.class);
 
     private static final List<String> HEADERS = List.of(
             "ISIN",
@@ -49,13 +74,17 @@ public class ExportService {
             "Dividendenwachstumsscore",
             "Gewinnwachstumsscore",
             "Bewertung",
-            "Zusammenfassung");
+            "Zusammenfassung",
+            "Risiko",
+            "Risikobegründung",
+            "Beta");
 
     private static final List<HeaderGroup> HEADER_GROUPS = List.of(
             new HeaderGroup(3, "Basis"),
             new HeaderGroup(3, "Basisdaten"),
             new HeaderGroup(3, "Scores"),
-            new HeaderGroup(2, "Fazit"));
+            new HeaderGroup(2, "Fazit"),
+            new HeaderGroup(3, "Finanzen.net Risiko"));
 
     private static final List<AktienfinderCellFiller> CELL_FILLERS = List.of(
             // basis
@@ -75,7 +104,14 @@ public class ExportService {
                     (as) -> as.stockFazit().anlagestrategie().gewinnwachstumsScore()),
             // fazit
             AktienfinderCellFiller.fromBewertung((as) -> as.stockFazit().bewertung()),
-            AktienfinderCellFiller.fromZusammenfassung((as) -> as.stockFazit().zusammenfassung()));
+            AktienfinderCellFiller.fromZusammenfassung((as) -> as.stockFazit().zusammenfassung()),
+            // risiko
+            AktienfinderCellFiller.neutral(
+                    (as) -> as.finanzenNetRisiko().risiko().orElse("")),
+            AktienfinderCellFiller.neutral(
+                    (as) -> as.finanzenNetRisiko().risikoBeschreibung().orElse("")),
+            AktienfinderCellFiller.neutral((as) ->
+                    as.finanzenNetRisiko().beta().map(BigDecimal::toPlainString).orElse("")));
 
     record HeaderGroup(int size, String name) {}
 

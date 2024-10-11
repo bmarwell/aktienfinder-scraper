@@ -30,6 +30,21 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Abstract base class for paginating web scrapers that retrieve stock data.
+ * This class provides functionality to navigate through paginated content
+ * and capture stocks from each page.
+ *
+ * <p>This class implements the {@link StockIndexStockRetriever} interface,
+ * meaning concrete implementations must define how to retrieve stock data
+ * for a specific stock index.
+ *
+ * <p>The main responsibilities of this class include:
+ * <ul>
+ *     <li>Navigating through paginated web content.
+ *     <li>Capturing stock data from each page.
+ * </ul>
+ */
 public abstract class AbstractPaginatableScraper implements StockIndexStockRetriever {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractPaginatableScraper.class);

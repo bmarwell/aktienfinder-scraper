@@ -34,7 +34,34 @@ import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "download", header = "Downloads a list of stocks")
+/**
+ * Command to download a list of stocks from predefined indexes and generate a JSON output file.
+ * <p>
+ * This command downloads stock data from several stock indexes and generates a JSON file with the details.
+ * It makes use of the {@link DownloadListService} to perform the stock data retrieval.
+ *
+ * <p>
+ * Options:
+ * <ul>
+ *   <li>{@code -o}, {@code --output}: Specifies the output file (in JSON format) where the downloaded stock data will be stored.</li>
+ * </ul>
+ *
+ * <p>
+ * The downloaded stock data includes:
+ * <ul>
+ *   <li>Stock name</li>
+ *   <li>Stock ISIN</li>
+ *   <li>Stock index (if available)</li>
+ * </ul>
+ *
+ * <p>
+ * Exit Codes:
+ * <ul>
+ *   <li>{@code 0}: Successfully completed the download and generated the JSON file.</li>
+ *   <li>{@code 1}: No stocks were downloaded.</li>
+ * </ul>
+ */
+@Command(name = "download", header = "Downloads a list of stocks and generates a JSON output file.")
 public class DownloadCommand implements Callable<Integer> {
 
     @Option(

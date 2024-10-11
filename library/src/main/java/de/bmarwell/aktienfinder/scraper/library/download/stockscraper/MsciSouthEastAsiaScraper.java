@@ -17,6 +17,23 @@ package de.bmarwell.aktienfinder.scraper.library.download.stockscraper;
 
 import java.net.URI;
 
+/**
+ * The {@code MsciSouthEastAsiaScraper} class is responsible for scraping stock data from the MSCI AC ASEAN Index.
+ * It extends the {@code AbstractWallstreetOnlineDeScraper} class, which provides the necessary functionality
+ * to navigate through paginated content and capture stock information.
+ *
+ * <p>This class specifically targets the URL:
+ * {@code https://www.wallstreet-online.de/indizes/msci-ac-asean-index/enthaltenewerte}.
+ *
+ * <p>Two main operations are defined in this class:
+ * <ul>
+ *     <li>{@code uri()}: Returns the URL of the page that contains the stock data.
+ *     <li>{@code getName()}: Returns the name of the stock index, which is "MSCI AC ASEAN Index".
+ * </ul>
+ *
+ * <p>Extending this class allows it to utilize the functionality of the {@code AbstractWallstreetOnlineDeScraper},
+ * including handling cookies, pagination, and extracting stock data from each page.
+ */
 public class MsciSouthEastAsiaScraper extends AbstractWallstreetOnlineDeScraper {
 
     @Override

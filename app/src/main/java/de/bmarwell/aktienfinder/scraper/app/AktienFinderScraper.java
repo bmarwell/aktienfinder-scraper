@@ -18,6 +18,24 @@ package de.bmarwell.aktienfinder.scraper.app;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
 
+/**
+ * Main class for the AktienFinderScraper application.
+ * <p>
+ * This application is designed to scrape stock information from aktienfinder.net.
+ * It supports various subcommands to download stock lists and scrape specific stock details.
+ * <p>
+ * Subcommands:
+ * - DownloadCommand: Downloads a list of stocks.
+ * - ScrapeCommand: Scrapes stocks from aktienfinder.net.
+ * <p>
+ * The application provides a command-line interface using the picocli library.
+ * <p>
+ * Each subcommand has its own specific options and functionality.
+ * <p>
+ * Example:
+ * Use different subcommands to perform specific tasks like downloading a list of stocks
+ * and scraping stock data from aktienfinder.net.
+ */
 @CommandLine.Command(
         name = "aktienfinder-scraper",
         mixinStandardHelpOptions = true,

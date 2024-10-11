@@ -16,7 +16,7 @@
 package de.bmarwell.aktienfinder.scraper.app;
 
 import de.bmarwell.aktienfinder.scraper.library.Stock;
-import de.bmarwell.aktienfinder.scraper.library.export.ExportService;
+import de.bmarwell.aktienfinder.scraper.library.export.MsExcelExportService;
 import de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
 import jakarta.json.Json;
@@ -37,12 +37,39 @@ import java.util.stream.Stream;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+/**
+ * This class represents a command-line utility designed to scrape stock information from the
+ * website <a href="https://aktienfinder.net">aktienfinder.net</a>. The command is executed with
+ * the name {@code scrape} and is intended to collect data on stocks based on input criteria
+ * provided by the user.
+ *
+ * <p>{@code ScrapeCommand} implements the {@link Callable} interface and overrides its
+ * {@code call} method to perform the scraping operation. Command-line options are used to
+ * specify input ISINs, an input file, and an output file.
+ *
+ * <p>Options:
+ * <ul>
+ *     <li>{@code -i, --stocks}: Specifies input stock ISINs with a comma-separated list.</li>
+ *     <li>{@code -f, --input-file}: Specifies the input file containing stock data in JSON format.</li>
+ *     <li>{@code -o, --output}: Specifies the output file where the scraped stock data will be
+ *     exported in an XLSX format.</li>
+ * </ul>
+ *
+ * <p>The {@code call} method:
+ * <ol>
+ *     <li>Loads stock data from the provided ISINs.</li>
+ *     <li>Loads additional stock data from the provided input file if available.</li>
+ *     <li>Combines the stock data from both sources into a single set.</li>
+ *     <li>Uses {@link ScrapeService} to scrape detailed stock information.</li>
+ *     <li>Exports the scraped data to the specified output file using {@link MsExcelExportService}.</li>
+ * </ol>
+ */
 @Command(name = "scrape", header = "Scrapes stocks from aktienfinder.net")
 public class ScrapeCommand implements Callable<Integer> {
 
     @Option(
             names = {"-i", "--stocks"},
-            description = "stock isins",
+            description = "input stock isins",
             split = ",")
     Set<String> stockIsins = new HashSet<>();
 
@@ -91,8 +118,8 @@ public class ScrapeCommand implements Callable<Integer> {
         try (var scrapeService = new ScrapeService()) {
             List<AktienfinderStock> ratings = scrapeService.scrapeAll(allStocks);
 
-            ExportService exportService = new ExportService();
-            exportService.export(ratings, outputFile);
+            MsExcelExportService msExcelExportService = new MsExcelExportService();
+            msExcelExportService.export(ratings, outputFile);
         }
 
         return 0;

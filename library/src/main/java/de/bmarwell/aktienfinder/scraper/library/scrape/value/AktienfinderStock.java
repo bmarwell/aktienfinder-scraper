@@ -17,4 +17,5 @@ package de.bmarwell.aktienfinder.scraper.library.scrape.value;
 
 import de.bmarwell.aktienfinder.scraper.library.Stock;
 
-public record AktienfinderStock(Stock stock, StockBewertung stockBewertung, StockFazit stockFazit) {}
+public record AktienfinderStock(
+        Stock stock, StockBewertung stockBewertung, StockFazit stockFazit, FinanzenNetRisiko finanzenNetRisiko) {}

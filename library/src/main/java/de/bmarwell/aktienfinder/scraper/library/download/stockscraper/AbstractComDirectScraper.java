@@ -32,6 +32,21 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * An abstract base class for scraping stock index data from ComDirect.
+ * This class extends {@link AbstractPaginatableScraper} and implements {@link StockIndexStockRetriever},
+ * providing the core functionality to scrape and retrieve stock data from paginated web pages.
+ *
+ * <p>This scraper navigates through the ComDirect website, accepting cookies,
+ * extracting stock data from current pages, and handling pagination to ensure
+ * all available stock data is retrieved.
+ *
+ * <p>The class relies on composable parts such as {@link Browser}, {@link Page}, {@link ElementHandle},
+ * and {@link Pattern} to perform these tasks.
+ *
+ * <p>Concrete implementations must define the stock index URI by overriding the {@code uri()} method
+ * and specify the name of the stock index by implementing the {@code getName()} method.
+ */
 public abstract class AbstractComDirectScraper extends AbstractPaginatableScraper implements StockIndexStockRetriever {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractComDirectScraper.class);

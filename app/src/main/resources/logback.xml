@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- This configuration file defines logging settings for the application.
+     It sets up a console appender with a custom logging pattern and log levels. -->
 <configuration debug="false">
   <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
 

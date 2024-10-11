@@ -6,7 +6,7 @@
   "packageRules": [
     {
       "matchPackagePatterns": [
-        "de\\.bmarwell\\.aktienfinder-scraper:.*"
+        "de\\.bmarwell\\.aktienfinder\\.scraper:.*"
       ],
       "enabled": false
     }

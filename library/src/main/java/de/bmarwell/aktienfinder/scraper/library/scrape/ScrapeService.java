@@ -334,7 +334,11 @@ public class ScrapeService implements AutoCloseable {
                     bodyOut.writeBytes(navResponse.body());
                     var errorBody = bodyOut.toString(StandardCharsets.UTF_8);
 
-                    LOG.warn("could not retrieve result of [{}], http status = [{}], body = [{}]", searchUri, navResponse.status(), errorBody);
+                    LOG.warn(
+                            "could not retrieve result of [{}], http status = [{}], body = [{}]",
+                            searchUri,
+                            navResponse.status(),
+                            errorBody);
 
                     return Optional.empty();
                 }

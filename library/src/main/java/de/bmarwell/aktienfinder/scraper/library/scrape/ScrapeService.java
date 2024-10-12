@@ -25,6 +25,7 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Locator.ClickOptions;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
+import com.microsoft.playwright.Page.ScreenshotOptions;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Response;
@@ -49,6 +50,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -320,6 +322,15 @@ public class ScrapeService implements AutoCloseable {
         try (Page page = browserContext.newPage()) {
             Response navigate = page.navigate(scrapeUri.toString());
 
+            if (navigate.status() != 200) {
+                LOG.info("Cannot navigate to landing page [{}] for isin {}, status = {}", scrapeUri, strippedIsin, navigate.status());
+                var so = new ScreenshotOptions();
+                so.setPath(Paths.get("/tmp/" + strippedIsin + "_landing.png"));
+                page.screenshot(so);
+
+                return Optional.empty();
+            }
+
             // TODO: find cookie banner
             clickCookieAcceptIfExists(page);
 
@@ -327,6 +338,10 @@ public class ScrapeService implements AutoCloseable {
 
             if (inputElement == null || inputElement.all().isEmpty()) {
                 LOG.warn("could not find search box");
+                var so = new ScreenshotOptions();
+                so.setPath(Paths.get("/tmp/" + strippedIsin + "_searchbox.png"));
+                page.screenshot(so);
+
                 return Optional.empty();
             }
 
@@ -336,7 +351,7 @@ public class ScrapeService implements AutoCloseable {
                     () -> inputElement.fill(strippedIsin));
 
             if (navigate2.status() != 200) {
-                LOG.info("Cannot navigate to [{}], status = {}", scrapeUri, navigate.status());
+                LOG.info("Cannot retrieve finde/jsonv2 [{}], status = {}", scrapeUri, navigate.status());
                 return Optional.empty();
             }
 

@@ -22,6 +22,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.ElementHandle;
 import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Locator.ClickOptions;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
 import com.microsoft.playwright.Playwright;
@@ -320,6 +321,7 @@ public class ScrapeService implements AutoCloseable {
             Response navigate = page.navigate(scrapeUri.toString());
 
             // TODO: find cookie banner
+            clickCookieAcceptIfExists(page);
 
             Locator inputElement = page.locator("input#suggest-search-desktop-input");
 
@@ -365,6 +367,20 @@ public class ScrapeService implements AutoCloseable {
             }
 
             return Optional.empty();
+        }
+    }
+
+    private void clickCookieAcceptIfExists(Page page) {
+        try {
+            Locator alleAkzeptieren = page.getByTitle("Alle akzeptieren");
+            if (alleAkzeptieren != null && alleAkzeptieren.isVisible() && alleAkzeptieren.isEnabled()) {
+
+                ClickOptions opts = new ClickOptions();
+                opts.setTimeout(500L);
+                alleAkzeptieren.click(opts);
+            }
+        } catch (PlaywrightException pe) {
+            LOG.trace("no accept button to click?", pe);
         }
     }
 

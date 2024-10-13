@@ -19,16 +19,12 @@ import static de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService.Resp
 import static de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService.ResponseConstants.ZUSAMMENFASSUNG;
 
 import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.Browser.NewContextOptions;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.ElementHandle;
-import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Locator.ClickOptions;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
-import com.microsoft.playwright.Page.ScreenshotOptions;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
-import com.microsoft.playwright.Response;
 import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
@@ -38,19 +34,14 @@ import de.bmarwell.aktienfinder.scraper.library.scrape.value.FinanzenNetRisiko;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockBewertung;
 import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockFazit;
 import jakarta.json.Json;
-import jakarta.json.JsonArray;
 import jakarta.json.JsonNumber;
-import jakarta.json.JsonObject;
 import jakarta.json.JsonValue;
 import jakarta.json.JsonValue.ValueType;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.StringReader;
-import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -62,6 +53,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -114,7 +106,7 @@ public class ScrapeService implements AutoCloseable {
             Playwright playwright = playwrightInstance.instance();
 
             try (Browser browser = playwright.chromium().launch();
-                    BrowserContext browserContext = browser.newContext()) {
+                    BrowserContext browserContext = browser.newContext(contextOptions())) {
                 loadAndPopulate(inStock, browserContext, xhrResponses, canonicalDataUrl);
 
                 // retry
@@ -126,10 +118,16 @@ public class ScrapeService implements AutoCloseable {
                     loadAndPopulate(inStock, browserContext, xhrResponses, canonicalDataUrl);
                 }
 
-                finanzenNetRisiko = getFinanzenNetRisiko(inStock, browserContext);
+                FinanzenNetScraper finanzenNetScraper = new FinanzenNetScraper(browserContext);
+
+                finanzenNetRisiko = finanzenNetScraper.getFinanzenNetRisiko(inStock);
             }
-        } catch (Exception autoCloseEx) {
-            LOG.error("Problem re-using playwright", autoCloseEx);
+        } catch (PlaywrightException autoCloseEx) {
+            LOG.error("Problem running playwright", autoCloseEx);
+        } catch (TimeoutException | InterruptedException teEx) {
+            LOG.error("Problem re-using playwright", teEx);
+        } catch (Exception genericEx) {
+            LOG.error("Problem with something too generic!", genericEx);
         }
 
         if (xhrResponses.get("StockProfile") == null) {
@@ -189,216 +187,6 @@ public class ScrapeService implements AutoCloseable {
         return Optional.of(aktienfinderStock);
     }
 
-    private FinanzenNetRisiko getFinanzenNetRisiko(Stock inStock, BrowserContext browserContext) {
-        Optional<URI> finanzenNetUrl = getFinanzenNetUrl(inStock, browserContext);
-
-        if (finanzenNetUrl.isEmpty()) {
-            return FinanzenNetRisiko.empty();
-        }
-
-        Optional<URI> finanzenNetRisikoUri =
-                getFinanzenNetRisikoUri(inStock, browserContext, finanzenNetUrl.orElseThrow());
-
-        if (finanzenNetRisikoUri.isEmpty()) {
-            return FinanzenNetRisiko.empty();
-        }
-
-        URI finanzenNetStockRisikoUri = finanzenNetRisikoUri.orElseThrow();
-        LOG.info("Guessing URI: " + finanzenNetStockRisikoUri);
-
-        return doGetFinanzenNetRisikoDetails(inStock, browserContext, finanzenNetStockRisikoUri);
-    }
-
-    private FinanzenNetRisiko doGetFinanzenNetRisikoDetails(
-            Stock inStock, BrowserContext browserContext, URI finanzenNetStockRisikoUri) {
-        Page page = null;
-
-        try {
-            page = browserContext.newPage();
-            Response navigationResponse = page.navigate(finanzenNetStockRisikoUri.toString());
-
-            if (navigationResponse.status() != 200) {
-                LOG.info(
-                        "Cannot navigate to [{}], status = {}", finanzenNetStockRisikoUri, navigationResponse.status());
-                return FinanzenNetRisiko.empty();
-            }
-
-            Optional<String> risiko = Optional.empty();
-            Optional<String> risikoBegruendung = Optional.empty();
-            Optional<BigDecimal> beta = Optional.empty();
-
-            // need to iterate result rows, as there are no IDs or classes which could be helpful
-            List<ElementHandle> tableRows = page.querySelectorAll(".table--headline-first-col tbody tr");
-            for (ElementHandle tableRow : tableRows) {
-                List<ElementHandle> tdElements = tableRow.querySelectorAll("td");
-
-                if (tdElements.size() < 2) {
-                    continue;
-                }
-
-                if (tdElements.getFirst().innerText().contains("Risiko")) {
-                    risiko = Optional.ofNullable(tdElements.get(2).innerText());
-                    risikoBegruendung = Optional.ofNullable(tdElements.get(3).innerText());
-                }
-
-                if (tdElements.getFirst().innerText().contains("Beta")) {
-                    String betaText = tdElements.get(1).innerText().strip().replaceAll(",", ".");
-
-                    try {
-                        BigDecimal bigDecimal = new BigDecimal(betaText);
-                        beta = Optional.of(bigDecimal);
-                    } catch (NumberFormatException nfe) {
-                        LOG.warn(
-                                "Beta for Stock {} is not a decimal value: {}, url [{}]",
-                                finanzenNetStockRisikoUri,
-                                betaText,
-                                finanzenNetStockRisikoUri);
-                    }
-                }
-            }
-
-            return new FinanzenNetRisiko(risiko, risikoBegruendung, beta);
-
-        } finally {
-            if (page != null) {
-                page.close();
-            }
-        }
-    }
-
-    /**
-     * Constructs and returns an optional URI for the risk analysis page of a given stock.
-     * If the input stock URI meets certain conditions, it transforms the URI to point
-     * to the risk analysis page. If not, it attempts to navigate to the stock's page
-     * and fetch additional risk analysis information.
-     *
-     * @param inStock the stock for which the URI is being generated; null values should be avoided
-     * @param browserContext the browser context used for navigating and fetching web pages; should not be null
-     * @param stockUri the URI of the stock page; must be a valid, non-null URI
-     * @return an {@code Optional<URI>} pointing to the risk analysis page if the transformation
-     *         is possible, otherwise an empty {@code Optional}. It can also return empty if there
-     *         are errors during navigation and page fetch attempts.
-     */
-    private Optional<URI> getFinanzenNetRisikoUri(Stock inStock, BrowserContext browserContext, URI stockUri) {
-        Page page = null;
-
-        String stockUriString = stockUri.toString();
-
-        if (stockUriString.contains("/aktien/") && stockUriString.endsWith("-aktie")) {
-            String modifiedUri =
-                    stockUriString.replaceAll("/aktien/", "/risikoanalyse/").replaceAll("-aktie", "");
-            return Optional.of(URI.create(modifiedUri));
-        }
-
-        try {
-            page = browserContext.newPage();
-            page.navigate(stockUriString);
-
-            throw new UnsupportedOperationException(
-                    "Not yet implemented: navigate to risikoanalyse for " + stockUriString);
-        } finally {
-            if (page != null) {
-                page.close();
-            }
-        }
-    }
-
-    /**
-     * Constructs and returns an optional {@code URI} for a stock from Finanzen.net.
-     * <p>
-     * This method attempts to navigate to a specific JSON endpoint on Finanzen.net,
-     * parses the JSON response, and retrieves the URL corresponding to the provided stock's ISIN.
-     * </p>
-     *
-     * @param inStock the stock for which the URL is being generated; must not be {@code null}.
-     * @param browserContext the browser context used for navigating and fetching web pages; must not be {@code null}.
-     * @return an {@code Optional<URI>} containing the URL if found, otherwise an empty {@code Optional}.
-     */
-    private Optional<URI> getFinanzenNetUrl(Stock inStock, BrowserContext browserContext) {
-        URI scrapeUri = URI.create("https://www.finanzen.net/");
-        String strippedIsin = inStock.isin().strip();
-
-        // "https://www.finanzen.net/suggest/finde/jsonv2?max_results=25&Keywords_mode=APPROX&Keywords=%1$s&query=%1$s&bias=100",
-        try (Page page = browserContext.newPage()) {
-            Response navigate = page.navigate(scrapeUri.toString());
-
-            if (navigate.status() != 200) {
-                LOG.info("Cannot navigate to landing page [{}] for isin {}, status = {}", scrapeUri, strippedIsin, navigate.status());
-                var so = new ScreenshotOptions();
-                so.setPath(Paths.get("/tmp/" + strippedIsin + "_landing.png"));
-                page.screenshot(so);
-
-                return Optional.empty();
-            }
-
-            // TODO: find cookie banner
-            clickCookieAcceptIfExists(page);
-
-            Locator inputElement = page.locator("input#suggest-search-desktop-input");
-
-            if (inputElement == null || inputElement.all().isEmpty()) {
-                LOG.warn("could not find search box");
-                var so = new ScreenshotOptions();
-                so.setPath(Paths.get("/tmp/" + strippedIsin + "_searchbox.png"));
-                page.screenshot(so);
-
-                return Optional.empty();
-            }
-
-            Response navigate2 = page.waitForResponse(
-                    response -> response.url().contains("t/suggest/finde/jsonv2")
-                            && response.url().contains("query=" + strippedIsin),
-                    () -> inputElement.fill(strippedIsin));
-
-            if (navigate2.status() != 200) {
-                LOG.info("Cannot retrieve finde/jsonv2 [{}], status = {}", scrapeUri, navigate.status());
-                return Optional.empty();
-            }
-
-            String jsonResponse = navigate2.text();
-
-            // Parse the JSON response
-            var jsonReader = Json.createReader(new StringReader(jsonResponse));
-            var jsonArray = jsonReader.readArray();
-
-            // Look for the element with the field "n" having the value "Aktien"
-            for (var jsonValue : jsonArray) {
-                if (jsonValue instanceof JsonObject aktienResult
-                        && "Aktien".equals(aktienResult.getString("n", ""))
-                        && aktienResult.get("il") instanceof JsonArray aktienList) {
-                    // Element found, do something with aktienResult if needed
-                    LOG.debug("Found element with 'n' = 'Aktien': {}", aktienResult);
-                    for (JsonValue aktienJsonResult : aktienList) {
-                        if (!(aktienJsonResult instanceof JsonObject aktienJson)) {
-                            continue;
-                        }
-
-                        if (aktienJson.getString("isin").equals(strippedIsin)) {
-                            return Optional.of(URI.create(aktienJson.getString("u")));
-                        }
-                    }
-                    break;
-                }
-            }
-
-            return Optional.empty();
-        }
-    }
-
-    private void clickCookieAcceptIfExists(Page page) {
-        try {
-            Locator alleAkzeptieren = page.getByTitle("Alle akzeptieren");
-            if (alleAkzeptieren != null && alleAkzeptieren.isVisible() && alleAkzeptieren.isEnabled()) {
-
-                ClickOptions opts = new ClickOptions();
-                opts.setTimeout(500L);
-                alleAkzeptieren.click(opts);
-            }
-        } catch (PlaywrightException pe) {
-            LOG.trace("no accept button to click?", pe);
-        }
-    }
-
     private static Anlagestrategie getAnlageStrategieScorings(HashMap<String, String> xhrResponses) {
         var scoringResponse =
                 new ByteArrayInputStream(xhrResponses.get("Scorings").getBytes(StandardCharsets.UTF_8));
@@ -440,7 +228,7 @@ public class ScrapeService implements AutoCloseable {
         Page page = context.newPage();
         page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));
         var navigateOptions = new NavigateOptions();
-        navigateOptions.setTimeout(10_000L);
+        navigateOptions.setTimeout(15_000L);
         context.onResponse(response -> {
             LOG.debug("loaded data: [{}] for ISIN [{}].", response.url(), inStock.isin());
 
@@ -540,13 +328,13 @@ public class ScrapeService implements AutoCloseable {
         }
     }
 
-    private static Optional<URI> getCanonicalDataUrl(Stock stock) {
+    private Optional<URI> getCanonicalDataUrl(Stock stock) {
         var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/"
                 + stock.isin().strip());
 
-        try (Playwright playwright = Playwright.create()) {
-            try (Browser browser = playwright.chromium().launch()) {
-                BrowserContext context = browser.newContext();
+        try (Instance<Playwright> playwright = this.browserCache.getBlocking()) {
+            try (Browser browser = playwright.instance().chromium().launch()) {
+                BrowserContext context = browser.newContext(contextOptions());
                 Page page = context.newPage();
                 var navigateOptions = new NavigateOptions();
                 navigateOptions.setTimeout(10_000L);
@@ -584,7 +372,7 @@ public class ScrapeService implements AutoCloseable {
                     return Optional.of(uri);
                 }
             }
-        } catch (RuntimeException httpEx) {
+        } catch (Exception httpEx) {
             LOG.error(
                     "unable to retrieve aktien name for ISIN [{}], URL=[{}], unknown error.",
                     stock.isin(),
@@ -605,6 +393,17 @@ public class ScrapeService implements AutoCloseable {
 
     private Playwright createPlaywright() {
         return Playwright.create();
+    }
+
+    private NewContextOptions contextOptions() {
+        NewContextOptions newContextOptions = new NewContextOptions();
+        newContextOptions.setAcceptDownloads(false);
+        newContextOptions.setLocale("de-DE");
+        newContextOptions.setHasTouch(false);
+        newContextOptions.setTimezoneId("Europe/Berlin");
+        newContextOptions.setUserAgent("Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0");
+
+        return newContextOptions;
     }
 
     static class ResponseConstants {

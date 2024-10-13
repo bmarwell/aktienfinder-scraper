@@ -53,6 +53,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,25 +62,50 @@ public class ScrapeService implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScrapeService.class);
 
-    private final ExecutorService executor = Executors.newWorkStealingPool(ExecutorHelper.getNumberThreads());
+    private final ExecutorService executor = Executors.newFixedThreadPool(
+        ExecutorHelper.getNumberThreads(),
+        (Runnable runnable) -> {
+            Thread thread = new Thread(runnable);
+            thread.setName(String.format("scrape-thread-%d", thread.threadId()));
+            return thread;
+        });
 
     private final PoorMansCache<Playwright> browserCache =
             new PoorMansCache<>(ExecutorHelper.getNumberThreads(), this::createPlaywright);
 
+    /**
+     * Scrapes data for a set of provided stocks asynchronously.
+     * Each stock's data is processed in a separate thread to optimize performance.
+     *
+     * @param stockIsins a set of {@link Stock} objects that encapsulate information such as name and ISIN.
+     * @return a list of {@code AktienfinderStock} objects containing the scraped data for the provided stocks.
+     */
     public List<AktienfinderStock> scrapeAll(Set<Stock> stockIsins) {
         var resultList = new ArrayList<AktienfinderStock>();
         var threads = new ArrayList<Future<Optional<AktienfinderStock>>>();
 
         for (Stock stock : stockIsins) {
             var scraperThread = executor.submit(() -> this.scrape(stock));
+
             threads.add(scraperThread);
         }
 
         for (var thread : threads) {
+            if (thread == null) {
+                continue;
+            }
+
             try {
-                Optional<AktienfinderStock> aktienfinderStock = thread.get();
+                Optional<AktienfinderStock> aktienfinderStock = thread.get(30, TimeUnit.SECONDS);
                 aktienfinderStock.ifPresent(resultList::add);
+            } catch (TimeoutException e) {
+                thread.cancel(true);
+                LOG.warn("Thread timed out: [{}]", thread);
             } catch (CancellationException | ExecutionException | InterruptedException ex) {
+                if (ex instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+
                 LOG.warn("Thread not finished: [{}]", thread, ex);
             }
         }
@@ -87,6 +113,16 @@ public class ScrapeService implements AutoCloseable {
         return List.copyOf(resultList);
     }
 
+    /**
+     * Scrapes detailed stock information for a given {@link Stock} by utilizing the Aktienfinder and FinanzenNet 
+     * scraping mechanisms.
+     *
+     * <p>This method attempts to retrieve a stock's canonical data URL, loads the stock's profile via Playwright, 
+     * and extracts the relevant financial data. If data extraction fails, it retries up to two times.</p>
+     *
+     * @param inStock The {@link Stock} object for which detailed information needs to be scraped.
+     * @return An {@code Optional<AktienfinderStock>} containing detailed information about the stock if available; otherwise {@code Optional.empty()}.
+     */
     private Optional<AktienfinderStock> scrape(Stock inStock) {
         Optional<URI> scrapeUrl = getCanonicalDataUrl(inStock);
 
@@ -103,23 +139,22 @@ public class ScrapeService implements AutoCloseable {
         FinanzenNetRisiko finanzenNetRisiko = FinanzenNetRisiko.empty();
 
         try (Instance<Playwright> playwrightInstance = this.browserCache.getBlocking()) {
-            Playwright playwright = playwrightInstance.instance();
-
-            try (Browser browser = playwright.chromium().launch();
+            try (Browser browser = playwrightInstance.instance().chromium().launch();
                     BrowserContext browserContext = browser.newContext(contextOptions())) {
-                loadAndPopulate(inStock, browserContext, xhrResponses, canonicalDataUrl);
+
+                AktienfinderScraper aktienfinderScraper = new AktienfinderScraper(browserContext);
+                aktienfinderScraper.loadAndPopulate(inStock, xhrResponses, canonicalDataUrl);
 
                 // retry
                 if (xhrResponses.get("StockProfile") == null) {
-                    loadAndPopulate(inStock, browserContext, xhrResponses, canonicalDataUrl);
+                    aktienfinderScraper.loadAndPopulate(inStock, xhrResponses, canonicalDataUrl);
                 }
                 // retry 2
                 if (xhrResponses.get("Scorings") == null) {
-                    loadAndPopulate(inStock, browserContext, xhrResponses, canonicalDataUrl);
+                    aktienfinderScraper.loadAndPopulate(inStock, xhrResponses, canonicalDataUrl);
                 }
 
                 FinanzenNetScraper finanzenNetScraper = new FinanzenNetScraper(browserContext);
-
                 finanzenNetRisiko = finanzenNetScraper.getFinanzenNetRisiko(inStock);
             }
         } catch (PlaywrightException autoCloseEx) {
@@ -131,7 +166,8 @@ public class ScrapeService implements AutoCloseable {
         }
 
         if (xhrResponses.get("StockProfile") == null) {
-            LOG.warn("empty StockProfile for stockIsin [{}]", inStock);
+            LOG.warn("empty StockProfile for stock [{} - ISIN: {}]", inStock.name(), inStock.isin());
+
             return Optional.empty();
         }
 
@@ -223,119 +259,14 @@ public class ScrapeService implements AutoCloseable {
                         : (short) -1);
     }
 
-    private static void loadAndPopulate(
-            Stock inStock, BrowserContext context, HashMap<String, String> xhrResponses, URI canonicalDataUrl) {
-        Page page = context.newPage();
-        page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));
-        var navigateOptions = new NavigateOptions();
-        navigateOptions.setTimeout(15_000L);
-        context.onResponse(response -> {
-            LOG.debug("loaded data: [{}] for ISIN [{}].", response.url(), inStock.isin());
-
-            if (response.url().endsWith("Scorings")) {
-                xhrResponses.put("Scorings", response.text());
-            }
-
-            if (response.url().endsWith("Performance")) {
-                xhrResponses.put("Performance", response.text());
-            }
-
-            if (response.url().endsWith("EarningsProfile")) {
-                xhrResponses.put("EarningsProfile", response.text());
-            }
-
-            if (response.url().contains("api/StockProfile?securityName=")) {
-                xhrResponses.put("StockProfile", response.text());
-            }
-        });
-
-        var navResponse = page.navigate(canonicalDataUrl.toString(), navigateOptions);
-        navResponse.finished();
-
-        if (navResponse.status() != 200) {
-            LOG.warn(
-                    "could not retrieve stock data result of [{}], http status = [{}]",
-                    canonicalDataUrl,
-                    navResponse.status());
-            LOG.warn("headers: [{}]", navResponse.headers());
-            return;
-        }
-
-        boolean errorOccurred;
-        for (int tries = 0; tries < 3; tries++) {
-            try {
-                parseBewertungZusammenfassung(xhrResponses, page);
-                errorOccurred = false;
-            } catch (PlaywrightException pe) {
-                LOG.error(
-                        "Problem loading fazit for ISIN [{}], URL = [{}], message = [{}].",
-                        inStock,
-                        canonicalDataUrl,
-                        pe.getMessage());
-                LOG.trace("Problem loading fazit for ISIN [{}], URL = [{}].", inStock, canonicalDataUrl, pe);
-                errorOccurred = true;
-            }
-
-            if (!errorOccurred) {
-                break;
-            }
-        }
-    }
-
-    private static void parseBewertungZusammenfassung(HashMap<String, String> xhrResponses, Page page) {
-        var aktieKaufHeading = page.querySelector("#fazit-für-wen-ist-die-aktie-ein-kauf");
-
-        if (aktieKaufHeading != null) {
-            DomHelper.tryScrollIntoView(aktieKaufHeading);
-        }
-
-        var stockProfileSummary = page.querySelector(".stockprofile__summary_conclusion_row");
-
-        if (stockProfileSummary != null) {
-            DomHelper.tryScrollIntoView(stockProfileSummary);
-        }
-
-        var summaryInner = page.querySelector("div.stockprofile span.stockprofile__summary_row__inner");
-
-        if (summaryInner != null) {
-            xhrResponses.put(BEWERTUNG, summaryInner.innerText().strip());
-        }
-
-        var conclusionRow = page.querySelector(".stockprofile__summary_conclusion_row");
-
-        if (conclusionRow != null) {
-            String summaryClass = conclusionRow.getAttribute("class");
-
-            if (summaryClass != null && summaryClass.contains("background--negative")) {
-                xhrResponses.put(ZUSAMMENFASSUNG, "negative");
-            }
-
-            if (summaryClass != null && summaryClass.contains("background--negative-light")) {
-                xhrResponses.put(ZUSAMMENFASSUNG, "negative-light");
-            }
-
-            if (summaryClass != null && summaryClass.contains("background--neutral-light")) {
-                xhrResponses.put(ZUSAMMENFASSUNG, "neutral-light");
-            }
-
-            if (summaryClass != null && summaryClass.contains("background--positive")) {
-                xhrResponses.put(ZUSAMMENFASSUNG, "positive");
-            }
-
-            if (summaryClass != null && summaryClass.contains("background--positive-light")) {
-                xhrResponses.put(ZUSAMMENFASSUNG, "positive-light");
-            }
-        }
-    }
-
     private Optional<URI> getCanonicalDataUrl(Stock stock) {
         var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/"
                 + stock.isin().strip());
 
         try (Instance<Playwright> playwright = this.browserCache.getBlocking()) {
-            try (Browser browser = playwright.instance().chromium().launch()) {
-                BrowserContext context = browser.newContext(contextOptions());
-                Page page = context.newPage();
+            try (Browser browser = playwright.instance().chromium().launch();
+            BrowserContext context = browser.newContext(contextOptions());
+                Page page = context.newPage()) {
                 var navigateOptions = new NavigateOptions();
                 navigateOptions.setTimeout(10_000L);
                 page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));

@@ -62,13 +62,12 @@ public class ScrapeService implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScrapeService.class);
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(
-        ExecutorHelper.getNumberThreads(),
-        (Runnable runnable) -> {
-            Thread thread = new Thread(runnable);
-            thread.setName(String.format("scrape-thread-%d", thread.threadId()));
-            return thread;
-        });
+    private final ExecutorService executor =
+            Executors.newFixedThreadPool(ExecutorHelper.getNumberThreads(), (Runnable runnable) -> {
+                Thread thread = new Thread(runnable);
+                thread.setName(String.format("scrape-thread-%d", thread.threadId()));
+                return thread;
+            });
 
     private final PoorMansCache<Playwright> browserCache =
             new PoorMansCache<>(ExecutorHelper.getNumberThreads(), this::createPlaywright);
@@ -114,10 +113,10 @@ public class ScrapeService implements AutoCloseable {
     }
 
     /**
-     * Scrapes detailed stock information for a given {@link Stock} by utilizing the Aktienfinder and FinanzenNet 
+     * Scrapes detailed stock information for a given {@link Stock} by utilizing the Aktienfinder and FinanzenNet
      * scraping mechanisms.
      *
-     * <p>This method attempts to retrieve a stock's canonical data URL, loads the stock's profile via Playwright, 
+     * <p>This method attempts to retrieve a stock's canonical data URL, loads the stock's profile via Playwright,
      * and extracts the relevant financial data. If data extraction fails, it retries up to two times.</p>
      *
      * @param inStock The {@link Stock} object for which detailed information needs to be scraped.
@@ -265,8 +264,8 @@ public class ScrapeService implements AutoCloseable {
 
         try (Instance<Playwright> playwright = this.browserCache.getBlocking()) {
             try (Browser browser = playwright.instance().chromium().launch();
-            BrowserContext context = browser.newContext(contextOptions());
-                Page page = context.newPage()) {
+                    BrowserContext context = browser.newContext(contextOptions());
+                    Page page = context.newPage()) {
                 var navigateOptions = new NavigateOptions();
                 navigateOptions.setTimeout(10_000L);
                 page.onDOMContentLoaded(pageContent -> LOG.debug("loaded: [{}]", pageContent.url()));

@@ -20,7 +20,7 @@ import jakarta.persistence.PersistenceContext;
 
 public abstract class AbstractRepository {
 
-    @PersistenceContext
+    @PersistenceContext(unitName = "aktienfinder-scraper-db")
     private EntityManager entityManager;
 
     protected EntityManager getEntityManager() {

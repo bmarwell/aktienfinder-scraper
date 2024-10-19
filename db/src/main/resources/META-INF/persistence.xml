@@ -1,0 +1,7 @@
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.0">
+  <persistence-unit name="aktienfinder-scraper-db" transaction-type="JTA">
+    <jta-data-source>jdbc/AktienfinderScraperDB</jta-data-source>
+    <exclude-unlisted-classes>false</exclude-unlisted-classes>
+    <shared-cache-mode>ENABLE_SELECTIVE</shared-cache-mode>
+  </persistence-unit>
+</persistence>

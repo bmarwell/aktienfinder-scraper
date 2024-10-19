@@ -51,14 +51,19 @@
     <dependency.cleanthat.version>2.22</dependency.cleanthat.version>
     <dependency.palantir-java-format.version>2.50.0</dependency.palantir-java-format.version>
 
+    <hibernate.version>6.6.1.Final</hibernate.version>
+
     <!-- 3rd party plugins -->
     <plugin.jreleaser.version>1.14.0</plugin.jreleaser.version>
     <plugin.spotless.version>2.43.0</plugin.spotless.version>
   </properties>
 
   <modules>
+    <module>value</module>
     <module>library</module>
     <module>app</module>
+    <module>db</module>
+    <module>web</module>
   </modules>
 
   <dependencyManagement>
@@ -136,6 +141,43 @@
         <version>${dependency.cleanthat.version}</version>
       </dependency>
 
+      <dependency>
+        <groupId>jakarta.ws.rs</groupId>
+        <artifactId>jakarta.ws.rs-api</artifactId>
+        <version>3.1.0</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.servlet</groupId>
+        <artifactId>jakarta.servlet-api</artifactId>
+        <version>6.0.0</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.enterprise.concurrent</groupId>
+        <artifactId>jakarta.enterprise.concurrent-api</artifactId>
+        <version>3.0.4</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.enterprise</groupId>
+        <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        <version>4.0.1</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.persistence</groupId>
+        <artifactId>jakarta.persistence-api</artifactId>
+        <version>3.1.0</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.transaction</groupId>
+        <artifactId>jakarta.transaction-api</artifactId>
+        <version>2.0.1</version>
+        <scope>provided</scope>
+      </dependency>
+
     </dependencies>
   </dependencyManagement>
 
@@ -182,6 +224,11 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.5.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-war-plugin</artifactId>
+          <version>3.4.0</version>
         </plugin>
 
         <!-- 3rd party plugins -->

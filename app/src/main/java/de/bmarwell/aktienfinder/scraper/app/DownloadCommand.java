@@ -15,10 +15,10 @@
  */
 package de.bmarwell.aktienfinder.scraper.app;
 
-import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.download.DownloadListService;
 import de.bmarwell.aktienfinder.scraper.library.download.StockDownloadOption;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndex;
+import de.bmarwell.aktienfinder.scraper.value.Stock;
 import jakarta.json.Json;
 import jakarta.json.JsonArrayBuilder;
 import jakarta.json.JsonObject;

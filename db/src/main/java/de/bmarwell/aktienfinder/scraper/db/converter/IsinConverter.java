@@ -13,27 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library;
+package de.bmarwell.aktienfinder.scraper.db.converter;
 
-import java.util.Objects;
-import java.util.Optional;
+import de.bmarwell.aktienfinder.scraper.value.Isin;
+import jakarta.persistence.AttributeConverter;
+import jakarta.persistence.Converter;
 
-public record Stock(String name, String isin, Optional<String> index) {
+@Converter
+public class IsinConverter implements AttributeConverter<Isin, String> {
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        Stock stock = (Stock) o;
-        return Objects.equals(name, stock.name) && Objects.equals(isin, stock.isin);
+    public String convertToDatabaseColumn(Isin attribute) {
+        return attribute.value();
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(name, isin);
+    public Isin convertToEntityAttribute(String dbData) {
+        return new Isin(dbData);
     }
 }

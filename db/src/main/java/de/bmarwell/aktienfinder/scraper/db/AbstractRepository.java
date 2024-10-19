@@ -13,7 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.scrape.value;
+package de.bmarwell.aktienfinder.scraper.db;
 
-public record Anlagestrategie(
-        short dividendenertragsScore, short dividendenwachstumsScore, short gewinnwachstumsScore) {}
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
+public abstract class AbstractRepository {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    protected EntityManager getEntityManager() {
+        return entityManager;
+    }
+}

@@ -25,14 +25,14 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
-import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.Anlagestrategie;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.FinanzenNetRisiko;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockBewertung;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.StockFazit;
+import de.bmarwell.aktienfinder.scraper.value.AktienfinderStock;
+import de.bmarwell.aktienfinder.scraper.value.Anlagestrategie;
+import de.bmarwell.aktienfinder.scraper.value.FinanzenNetRisiko;
+import de.bmarwell.aktienfinder.scraper.value.Stock;
+import de.bmarwell.aktienfinder.scraper.value.StockBewertung;
+import de.bmarwell.aktienfinder.scraper.value.StockFazit;
 import jakarta.json.Json;
 import jakarta.json.JsonNumber;
 import jakarta.json.JsonValue;
@@ -43,11 +43,11 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -79,7 +79,7 @@ public class ScrapeService implements AutoCloseable {
      * @param stockIsins a set of {@link Stock} objects that encapsulate information such as name and ISIN.
      * @return a list of {@code AktienfinderStock} objects containing the scraped data for the provided stocks.
      */
-    public List<AktienfinderStock> scrapeAll(Set<Stock> stockIsins) {
+    public List<AktienfinderStock> scrapeAll(Collection<Stock> stockIsins) {
         var resultList = new ArrayList<AktienfinderStock>();
         var threads = new ArrayList<Future<Optional<AktienfinderStock>>>();
 
@@ -122,7 +122,7 @@ public class ScrapeService implements AutoCloseable {
      * @param inStock The {@link Stock} object for which detailed information needs to be scraped.
      * @return An {@code Optional<AktienfinderStock>} containing detailed information about the stock if available; otherwise {@code Optional.empty()}.
      */
-    private Optional<AktienfinderStock> scrape(Stock inStock) {
+    public Optional<AktienfinderStock> scrape(Stock inStock) {
         Optional<URI> scrapeUrl = getCanonicalDataUrl(inStock);
 
         if (scrapeUrl.isEmpty()) {

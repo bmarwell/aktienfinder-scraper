@@ -4,10 +4,9 @@ module de.bmarwell.aktienfinder.scraper.library {
     requires playwright;
     requires org.apache.poi.ooxml;
     requires org.jspecify;
+    requires de.bmarwell.aktienfinder.scraper.value;
 
-    exports de.bmarwell.aktienfinder.scraper.library;
     exports de.bmarwell.aktienfinder.scraper.library.scrape;
-    exports de.bmarwell.aktienfinder.scraper.library.scrape.value;
     exports de.bmarwell.aktienfinder.scraper.library.download;
     exports de.bmarwell.aktienfinder.scraper.library.export;
     exports de.bmarwell.aktienfinder.scraper.library.download.stockscraper;

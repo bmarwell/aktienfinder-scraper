@@ -23,6 +23,7 @@ module de.bmarwell.aktienfinder.scraper.app {
     requires info.picocli;
     requires de.bmarwell.aktienfinder.scraper.library;
     requires jakarta.json;
+    requires de.bmarwell.aktienfinder.scraper.value;
 
     exports de.bmarwell.aktienfinder.scraper.app to
             info.picocli;

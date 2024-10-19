@@ -16,10 +16,10 @@
 package de.bmarwell.aktienfinder.scraper.library.download;
 
 import com.microsoft.playwright.Playwright;
-import de.bmarwell.aktienfinder.scraper.library.Stock;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache;
 import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
 import de.bmarwell.aktienfinder.scraper.library.scrape.ExecutorHelper;
+import de.bmarwell.aktienfinder.scraper.value.Stock;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;

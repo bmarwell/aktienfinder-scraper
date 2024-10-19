@@ -16,7 +16,7 @@
 package de.bmarwell.aktienfinder.scraper.library.export;
 
 import de.bmarwell.aktienfinder.scraper.library.lang.TriConsumer;
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
+import de.bmarwell.aktienfinder.scraper.value.AktienfinderStock;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;

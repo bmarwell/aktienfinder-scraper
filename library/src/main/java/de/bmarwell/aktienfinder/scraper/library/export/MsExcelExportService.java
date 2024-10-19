@@ -15,7 +15,7 @@
  */
 package de.bmarwell.aktienfinder.scraper.library.export;
 
-import de.bmarwell.aktienfinder.scraper.library.scrape.value.AktienfinderStock;
+import de.bmarwell.aktienfinder.scraper.value.AktienfinderStock;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;

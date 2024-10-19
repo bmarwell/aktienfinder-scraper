@@ -23,7 +23,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Page.NavigateOptions;
 import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Response;
-import de.bmarwell.aktienfinder.scraper.library.Stock;
+import de.bmarwell.aktienfinder.scraper.value.Stock;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.function.Consumer;

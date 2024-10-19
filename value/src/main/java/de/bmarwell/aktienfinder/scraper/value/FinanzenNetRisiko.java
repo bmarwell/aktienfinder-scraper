@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.scrape.value;
+package de.bmarwell.aktienfinder.scraper.value;
 
 import java.math.BigDecimal;
 import java.util.Optional;

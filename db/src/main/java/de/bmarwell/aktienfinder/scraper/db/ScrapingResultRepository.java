@@ -13,15 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.library.download;
+package de.bmarwell.aktienfinder.scraper.db;
 
-import com.microsoft.playwright.Playwright;
-import de.bmarwell.aktienfinder.scraper.value.Stock;
-import java.util.List;
+import de.bmarwell.aktienfinder.scraper.value.AktienfinderStock;
 
-public interface StockIndexStockRetriever {
+public interface ScrapingResultRepository {
 
-    String getName();
-
-    List<Stock> getStocks(Playwright blocking);
+    void updateScrapingResult(AktienfinderStock aktienfinderStock);
 }

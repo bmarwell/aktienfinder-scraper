@@ -17,6 +17,7 @@ package de.bmarwell.aktienfinder.scraper.db.dto;
 
 import de.bmarwell.aktienfinder.scraper.db.converter.IsinConverter;
 import jakarta.persistence.Basic;
+import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -31,40 +32,30 @@ public class ScrapingResult {
     @Convert(converter = IsinConverter.class)
     private String isin;
 
+    @Column(name = "name")
     private String name;
 
-    @Nullable
-    private Double bilanzierterGewinn;
+    private @Nullable Double bilanzierterGewinn;
 
-    @Nullable
-    private Double bereinigterGewinn;
+    private @Nullable Double bereinigterGewinn;
 
-    @Nullable
-    private Double operativerCashFlow;
+    private @Nullable Double operativerCashFlow;
 
-    @Nullable
-    private String fazitBewertung;
+    private @Nullable String fazitBewertung;
 
-    @Nullable
-    private Short dividendenEtragsScore;
+    private @Nullable Short dividendenEtragsScore;
 
-    @Nullable
-    private Short dividendenwachstumsScore;
+    private @Nullable Short dividendenwachstumsScore;
 
-    @Nullable
-    private Short gewinnwachstumsScore;
+    private @Nullable Short gewinnwachstumsScore;
 
-    @Nullable
-    private String fazitZusammenfassung;
+    private @Nullable String fazitZusammenfassung;
 
-    @Nullable
-    private String finanzenNetRisiko;
+    private @Nullable String finanzenNetRisiko;
 
-    @Nullable
-    private String finanzenNetRisikoBeschreibung;
+    private @Nullable String finanzenNetRisikoBeschreibung;
 
-    @Nullable
-    private BigDecimal beta;
+    private @Nullable BigDecimal beta;
 
     public ScrapingResult() {
         // jpa

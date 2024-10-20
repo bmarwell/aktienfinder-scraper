@@ -33,6 +33,7 @@ import de.bmarwell.aktienfinder.scraper.value.FinanzenNetRisiko;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
 import de.bmarwell.aktienfinder.scraper.value.StockBewertung;
 import de.bmarwell.aktienfinder.scraper.value.StockFazit;
+import de.bmarwell.aktienfinder.scraper.value.StockScrapingResult;
 import jakarta.json.Json;
 import jakarta.json.JsonNumber;
 import jakarta.json.JsonValue;
@@ -81,7 +82,7 @@ public class ScrapeService implements AutoCloseable {
      */
     public List<AktienfinderStock> scrapeAll(Collection<Stock> stockIsins) {
         var resultList = new ArrayList<AktienfinderStock>();
-        var threads = new ArrayList<Future<Optional<AktienfinderStock>>>();
+        var threads = new ArrayList<Future<StockScrapingResult>>();
 
         for (Stock stock : stockIsins) {
             var scraperThread = executor.submit(() -> this.scrape(stock));
@@ -95,8 +96,10 @@ public class ScrapeService implements AutoCloseable {
             }
 
             try {
-                Optional<AktienfinderStock> aktienfinderStock = thread.get(30, TimeUnit.SECONDS);
-                aktienfinderStock.ifPresent(resultList::add);
+                StockScrapingResult aktienfinderStock = thread.get(30, TimeUnit.SECONDS);
+                if (aktienfinderStock.isSuccessful()) {
+                    resultList.add(aktienfinderStock.aktienfinderStock());
+                }
             } catch (TimeoutException e) {
                 thread.cancel(true);
                 LOG.warn("Thread timed out: [{}]", thread);
@@ -122,11 +125,11 @@ public class ScrapeService implements AutoCloseable {
      * @param inStock The {@link Stock} object for which detailed information needs to be scraped.
      * @return An {@code Optional<AktienfinderStock>} containing detailed information about the stock if available; otherwise {@code Optional.empty()}.
      */
-    public Optional<AktienfinderStock> scrape(Stock inStock) {
+    public StockScrapingResult scrape(Stock inStock) {
         Optional<URI> scrapeUrl = getCanonicalDataUrl(inStock);
 
         if (scrapeUrl.isEmpty()) {
-            return Optional.empty();
+            return new StockScrapingResult(null, new IllegalStateException("no canonical data url found."));
         }
 
         var canonicalDataUrl = scrapeUrl.orElseThrow();
@@ -136,6 +139,8 @@ public class ScrapeService implements AutoCloseable {
         xhrResponses.put(ZUSAMMENFASSUNG, "neutral");
 
         FinanzenNetRisiko finanzenNetRisiko = FinanzenNetRisiko.empty();
+
+        Throwable lastException = null;
 
         try (Instance<Playwright> playwrightInstance = this.browserCache.getBlocking()) {
             try (Browser browser = playwrightInstance.instance().chromium().launch();
@@ -158,16 +163,19 @@ public class ScrapeService implements AutoCloseable {
             }
         } catch (PlaywrightException autoCloseEx) {
             LOG.error("Problem running playwright", autoCloseEx);
+            lastException = autoCloseEx;
         } catch (TimeoutException | InterruptedException teEx) {
             LOG.error("Problem re-using playwright", teEx);
+            lastException = teEx;
         } catch (Exception genericEx) {
             LOG.error("Problem with something too generic!", genericEx);
+            lastException = genericEx;
         }
 
         if (xhrResponses.get("StockProfile") == null) {
             LOG.warn("empty StockProfile for stock [{} - ISIN: {}]", inStock.name(), inStock.isin());
 
-            return Optional.empty();
+            return new StockScrapingResult(null, lastException);
         }
 
         // now read
@@ -219,7 +227,7 @@ public class ScrapeService implements AutoCloseable {
 
         LOG.debug("Aktienfinder Stock: [{}].", aktienfinderStock);
 
-        return Optional.of(aktienfinderStock);
+        return new StockScrapingResult(aktienfinderStock, null);
     }
 
     private static Anlagestrategie getAnlageStrategieScorings(HashMap<String, String> xhrResponses) {

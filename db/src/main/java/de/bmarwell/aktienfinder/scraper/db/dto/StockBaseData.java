@@ -18,11 +18,12 @@ package de.bmarwell.aktienfinder.scraper.db.dto;
 import de.bmarwell.aktienfinder.scraper.db.converter.IsinConverter;
 import de.bmarwell.aktienfinder.scraper.value.Isin;
 import jakarta.persistence.Basic;
+import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import java.time.Instant;
-import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 @Entity
 public class StockBaseData {
@@ -32,25 +33,37 @@ public class StockBaseData {
     @Convert(converter = IsinConverter.class)
     private Isin isin;
 
+    @Column(name = "name")
     private String name;
 
-    private Instant lastUpdated;
+    @Column(name = "last_update_run")
+    private @Nullable Instant lastUpdateRun;
+
+    @Column(name = "last_successful_run")
+    private @Nullable Instant lastSuccessfulRun;
+
+    @Column(name = "last_error_run")
+    private @Nullable Instant lastErrorRun;
+
+    @Column(name = "last_error_message")
+    private @Nullable String lastErrorMessage;
+
+    @Column(name = "error_run_count", nullable = true)
+    private int errorRunCount = 0;
 
     protected StockBaseData() {
         // jpa
-        this.lastUpdated = Instant.EPOCH;
     }
 
     public StockBaseData(Isin isin, String name) {
         this.isin = isin;
         this.name = name;
-        this.lastUpdated = Instant.EPOCH;
     }
 
-    public StockBaseData(Isin isin, String name, Instant lastUpdated) {
+    public StockBaseData(Isin isin, String name, @Nullable Instant lastUpdateRun) {
         this.isin = isin;
         this.name = name;
-        this.lastUpdated = lastUpdated;
+        this.lastUpdateRun = lastUpdateRun;
     }
 
     public Isin getIsin() {
@@ -69,16 +82,43 @@ public class StockBaseData {
         this.name = name;
     }
 
-    public Instant getLastUpdated() {
-        return lastUpdated;
+    public @Nullable Instant getLastUpdateRun() {
+        return lastUpdateRun;
     }
 
-    public void setLastUpdated(Instant lastUpdated) {
-        this.lastUpdated = lastUpdated;
+    public void setLastUpdateRun(@Nullable Instant lastUpdated) {
+        this.lastUpdateRun = lastUpdated;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(isin);
+    public @Nullable Instant getLastSuccessfulRun() {
+        return lastSuccessfulRun;
+    }
+
+    public void setLastSuccessfulRun(@Nullable Instant lastSuccessfulRun) {
+        this.lastSuccessfulRun = lastSuccessfulRun;
+    }
+
+    public @Nullable Instant getLastErrorRun() {
+        return lastErrorRun;
+    }
+
+    public void setLastErrorRun(@Nullable Instant lastErrorRun) {
+        this.lastErrorRun = lastErrorRun;
+    }
+
+    public @Nullable String getLastErrorMessage() {
+        return lastErrorMessage;
+    }
+
+    public void setLastErrorMessage(@Nullable String lastErrorMessage) {
+        this.lastErrorMessage = lastErrorMessage;
+    }
+
+    public int getErrorRunCount() {
+        return errorRunCount;
+    }
+
+    public void setErrorRunCount(int errorRunCount) {
+        this.errorRunCount = errorRunCount;
     }
 }

@@ -13,17 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.bmarwell.aktienfinder.scraper.db;
+package de.bmarwell.aktienfinder.scraper.value;
 
-import de.bmarwell.aktienfinder.scraper.db.dto.StockBaseData;
-import de.bmarwell.aktienfinder.scraper.value.Isin;
-import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
-public interface IsinUpdateRepository {
+public record StockScrapingResult(AktienfinderStock aktienfinderStock, @Nullable Throwable error) {
 
-    Optional<StockBaseData> getOldestUpdatedEntry();
-
-    void setUpdatedNowSuccessful(Isin isin, String name);
-
-    void setUpdatedNowWithError(Isin isin, Throwable throwable);
+    public boolean isSuccessful() {
+        return aktienfinderStock != null && error == null;
+    }
 }

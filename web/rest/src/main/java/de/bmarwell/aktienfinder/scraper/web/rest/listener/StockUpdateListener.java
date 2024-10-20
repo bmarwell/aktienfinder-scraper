@@ -21,6 +21,7 @@ import de.bmarwell.aktienfinder.scraper.db.dto.StockBaseData;
 import de.bmarwell.aktienfinder.scraper.library.scrape.ScrapeService;
 import de.bmarwell.aktienfinder.scraper.value.AktienfinderStock;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
+import de.bmarwell.aktienfinder.scraper.value.StockScrapingResult;
 import jakarta.annotation.Resource;
 import jakarta.enterprise.concurrent.ManagedScheduledExecutorService;
 import jakarta.inject.Inject;
@@ -65,14 +66,15 @@ public class StockUpdateListener implements ServletContextListener {
         try {
             Optional<StockBaseData> oldestUpdatedEntry = baseRepo.getOldestUpdatedEntry();
             if (oldestUpdatedEntry.isEmpty()) {
+                log.info("no stocks found to update.");
                 return;
             }
 
             StockBaseData stockBaseData = oldestUpdatedEntry.orElseThrow();
-            Instant lastUpdated = stockBaseData.getLastUpdated();
+            Instant lastUpdated = stockBaseData.getLastUpdateRun();
 
             Instant onlyUpdateIfBefore = Instant.now().minusSeconds(600L);
-            if (lastUpdated.isAfter(onlyUpdateIfBefore)) {
+            if (lastUpdated != null && lastUpdated.isAfter(onlyUpdateIfBefore)) {
                 log.info("Skipping update of {} as it is not 10 minutes old.", stockBaseData.getIsin());
                 return;
             }
@@ -82,20 +84,20 @@ public class StockUpdateListener implements ServletContextListener {
             try (ScrapeService scrapeService = new ScrapeService()) {
                 var stock = new Stock(
                         stockBaseData.getName(), stockBaseData.getIsin().toString(), Optional.empty());
-                Optional<AktienfinderStock> aktienfinderStock = scrapeService.scrape(stock);
+                StockScrapingResult scrapingResult = scrapeService.scrape(stock);
 
-                if (aktienfinderStock.isEmpty()) {
-                    // todo: should depend on resuly type (error vs. no data)
-                    baseRepo.setUpdatedNow(stockBaseData.getIsin(), stockBaseData.getName());
+                if (!scrapingResult.isSuccessful()) {
+                    baseRepo.setUpdatedNowWithError(stockBaseData.getIsin(), scrapingResult.error());
                     return;
                 }
 
-                AktienfinderStock stockResult = aktienfinderStock.orElseThrow();
+                AktienfinderStock stockResult = scrapingResult.aktienfinderStock();
                 resultRepository.updateScrapingResult(stockResult);
                 // only then:
-                baseRepo.setUpdatedNow(
+                baseRepo.setUpdatedNowSuccessful(
                         stockBaseData.getIsin(), stockResult.stock().name());
             } catch (Exception e) {
+                baseRepo.setUpdatedNowWithError(stockBaseData.getIsin(), e);
                 log.error("error while updating stock [{}]", stockBaseData, e);
             }
         } catch (RuntimeException e) {

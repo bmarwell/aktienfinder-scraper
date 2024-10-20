@@ -3,5 +3,9 @@
     <jta-data-source>jdbc/AktienfinderScraperDB</jta-data-source>
     <exclude-unlisted-classes>false</exclude-unlisted-classes>
     <shared-cache-mode>ENABLE_SELECTIVE</shared-cache-mode>
+
+    <properties>
+      <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" />
+    </properties>
   </persistence-unit>
 </persistence>

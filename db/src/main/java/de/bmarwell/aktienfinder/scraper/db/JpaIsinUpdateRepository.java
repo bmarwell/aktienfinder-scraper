@@ -38,7 +38,7 @@ public class JpaIsinUpdateRepository extends AbstractRepository implements IsinU
         var cb = em.getCriteriaBuilder();
         var query = cb.createQuery(StockBaseData.class);
         Root<StockBaseData> from = query.from(StockBaseData.class);
-        query.orderBy(cb.asc(from.get(StockBaseData_.lastUpdated)));
+        query.orderBy(cb.asc(from.get(StockBaseData_.lastUpdateRun)));
 
         List<StockBaseData> resultList = em.createQuery(query).setMaxResults(1).getResultList();
 
@@ -50,7 +50,7 @@ public class JpaIsinUpdateRepository extends AbstractRepository implements IsinU
     }
 
     @Override
-    public void setUpdatedNow(Isin isin, String name) {
+    public void setUpdatedNowSuccessful(Isin isin, String name) {
         var em = this.getEntityManager();
         StockBaseData stockBaseData = em.find(StockBaseData.class, isin);
 
@@ -59,8 +59,28 @@ public class JpaIsinUpdateRepository extends AbstractRepository implements IsinU
             return;
         }
 
-        stockBaseData.setLastUpdated(Instant.now());
+        stockBaseData.setLastUpdateRun(Instant.now());
         stockBaseData.setName(name);
+        stockBaseData.setErrorRunCount(0);
+        stockBaseData.setLastSuccessfulRun(Instant.now());
+        em.merge(stockBaseData);
+        em.flush();
+    }
+
+    @Override
+    public void setUpdatedNowWithError(Isin isin, Throwable throwable) {
+        var em = this.getEntityManager();
+        StockBaseData stockBaseData = em.find(StockBaseData.class, isin);
+
+        if (stockBaseData == null) {
+            log.warn("Cannot update non-existent stock [{}].", isin);
+            return;
+        }
+
+        stockBaseData.setLastUpdateRun(Instant.now());
+        stockBaseData.setErrorRunCount(stockBaseData.getErrorRunCount() + 1);
+        stockBaseData.setLastErrorRun(Instant.now());
+        stockBaseData.setLastErrorMessage(throwable.getClass().getName() + ": " + throwable.getMessage());
         em.merge(stockBaseData);
         em.flush();
     }

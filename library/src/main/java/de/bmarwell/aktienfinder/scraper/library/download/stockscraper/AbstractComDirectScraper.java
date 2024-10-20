@@ -24,6 +24,7 @@ import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.ElementState;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import de.bmarwell.aktienfinder.scraper.library.scrape.DomHelper;
+import de.bmarwell.aktienfinder.scraper.value.Isin;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
 import java.util.ArrayList;
 import java.util.List;
@@ -141,7 +142,7 @@ public abstract class AbstractComDirectScraper extends AbstractPaginatableScrape
 
             var isin = matcher.group(1);
 
-            Stock stock = new Stock(stockNameCol.innerText(), isin, Optional.of(getName()));
+            Stock stock = new Stock(stockNameCol.innerText(), Isin.fromString(isin), Optional.of(getName()));
             stocks.add(stock);
         }
     }

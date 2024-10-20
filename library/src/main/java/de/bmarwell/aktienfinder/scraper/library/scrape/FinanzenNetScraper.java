@@ -24,11 +24,14 @@ import com.microsoft.playwright.Locator.ClickOptions;
 import com.microsoft.playwright.Locator.PressSequentiallyOptions;
 import com.microsoft.playwright.Locator.WaitForOptions;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.Page.NavigateOptions;
 import com.microsoft.playwright.Page.ScreenshotOptions;
 import com.microsoft.playwright.Page.WaitForResponseOptions;
 import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Response;
+import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.WaitForSelectorState;
+import com.microsoft.playwright.options.WaitUntilState;
 import de.bmarwell.aktienfinder.scraper.value.FinanzenNetRisiko;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
 import jakarta.json.Json;
@@ -42,6 +45,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,39 +60,50 @@ public class FinanzenNetScraper {
     }
 
     public FinanzenNetRisiko getFinanzenNetRisiko(Stock inStock) {
-        ensureCookiesAccepted();
+        Throwable cookiesAcceptedThrowable = null;
+
+        for (int i = 0; i < 2; i++) {
+            if (cookiesAccepted) {
+                break;
+            }
+
+            cookiesAcceptedThrowable = ensureCookiesAccepted();
+        }
+
+        if (!cookiesAccepted) {
+            if (cookiesAcceptedThrowable != null) {
+                throw new IllegalStateException("could not accept cookies", cookiesAcceptedThrowable);
+            } else {
+                throw new IllegalStateException("could not accept cookies");
+            }
+        }
 
         Optional<URI> finanzenNetUrl = getFinanzenNetUrl(inStock);
 
         if (finanzenNetUrl.isEmpty()) {
-            return FinanzenNetRisiko.empty();
+            throw new IllegalStateException("No finanzenNetUrl found for stock " + inStock);
         }
 
-        Optional<URI> finanzenNetRisikoUri =
-                getFinanzenNetRisikoUri(inStock, browserContext, finanzenNetUrl.orElseThrow());
+        Optional<URI> finanzenNetRisikoUri = getFinanzenNetRisikoUri(browserContext, finanzenNetUrl.orElseThrow());
 
         if (finanzenNetRisikoUri.isEmpty()) {
-            return FinanzenNetRisiko.empty();
+            throw new IllegalStateException("No finanzenNetRisikoUri found for stock " + inStock);
         }
 
         URI finanzenNetStockRisikoUri = finanzenNetRisikoUri.orElseThrow();
         LOG.trace("Guessing URI: " + finanzenNetStockRisikoUri);
 
-        return doGetFinanzenNetRisikoDetails(inStock, browserContext, finanzenNetStockRisikoUri);
+        return doGetFinanzenNetRisikoDetails(browserContext, finanzenNetStockRisikoUri);
     }
 
     private FinanzenNetRisiko doGetFinanzenNetRisikoDetails(
-            Stock inStock, BrowserContext browserContext, URI finanzenNetStockRisikoUri) {
-        Page page = null;
-
-        try {
-            page = browserContext.newPage();
+            BrowserContext browserContext, URI finanzenNetStockRisikoUri) {
+        try (Page page = browserContext.newPage()) {
             Response navigationResponse = page.navigate(finanzenNetStockRisikoUri.toString());
 
             if (navigationResponse.status() != 200) {
-                LOG.info(
-                        "Cannot navigate to [{}], status = {}", finanzenNetStockRisikoUri, navigationResponse.status());
-                return FinanzenNetRisiko.empty();
+                throw new IllegalStateException("Cannot navigate to " + finanzenNetStockRisikoUri + ", status = "
+                        + navigationResponse.status());
             }
 
             Optional<String> risiko = Optional.empty();
@@ -126,11 +141,6 @@ public class FinanzenNetScraper {
             }
 
             return new FinanzenNetRisiko(risiko, risikoBegruendung, beta);
-
-        } finally {
-            if (page != null) {
-                page.close();
-            }
         }
     }
 
@@ -140,16 +150,13 @@ public class FinanzenNetScraper {
      * to the risk analysis page. If not, it attempts to navigate to the stock's page
      * and fetch additional risk analysis information.
      *
-     * @param inStock the stock for which the URI is being generated; null values should be avoided
      * @param browserContext the browser context used for navigating and fetching web pages; should not be null
      * @param stockUri the URI of the stock page; must be a valid, non-null URI
      * @return an {@code Optional<URI>} pointing to the risk analysis page if the transformation
      *         is possible, otherwise an empty {@code Optional}. It can also return empty if there
      *         are errors during navigation and page fetch attempts.
      */
-    private Optional<URI> getFinanzenNetRisikoUri(Stock inStock, BrowserContext browserContext, URI stockUri) {
-        Page page = null;
-
+    private Optional<URI> getFinanzenNetRisikoUri(BrowserContext browserContext, URI stockUri) {
         String stockUriString = stockUri.toString();
 
         if (stockUriString.contains("/aktien/") && stockUriString.endsWith("-aktie")) {
@@ -158,16 +165,11 @@ public class FinanzenNetScraper {
             return Optional.of(URI.create(modifiedUri));
         }
 
-        try {
-            page = browserContext.newPage();
+        try (Page page = browserContext.newPage()) {
             page.navigate(stockUriString);
 
             throw new UnsupportedOperationException(
                     "Not yet implemented: navigate to risikoanalyse for " + stockUriString);
-        } finally {
-            if (page != null) {
-                page.close();
-            }
         }
     }
 
@@ -183,7 +185,7 @@ public class FinanzenNetScraper {
      */
     private Optional<URI> getFinanzenNetUrl(Stock inStock) {
         URI scrapeUri = URI.create("https://www.finanzen.net/");
-        String strippedIsin = inStock.isin().strip();
+        String strippedIsin = inStock.isin().value().strip();
 
         // "https://www.finanzen.net/suggest/finde/jsonv2?max_results=25&Keywords_mode=APPROX&Keywords=%1$s&query=%1$s&bias=100",
         try (Page page = browserContext.newPage()) {
@@ -199,58 +201,19 @@ public class FinanzenNetScraper {
                 so.setPath(Paths.get("/tmp/" + strippedIsin + "_landing.png"));
                 page.screenshot(so);
 
-                return Optional.empty();
+                throw new IllegalStateException("Cannot navigate to landing page " + scrapeUri + ", status = "
+                        + navigate.status() + ". See " + so.path);
             }
 
-            Locator inputElement = page.locator("input#suggest-search-desktop-input");
-
-            if (inputElement == null || inputElement.all().isEmpty()) {
-                LOG.warn("could not find search box");
-                var so = new ScreenshotOptions();
-                so.setPath(Paths.get("/tmp/" + strippedIsin + "_searchbox.png"));
-                page.screenshot(so);
-
-                return Optional.empty();
-            }
-
-            Response navigate2;
-            Consumer<Response> responseLogger = createResponseLogger("WaitForSuggestFindeJsonV2");
-
-            try {
-                page.onResponse(responseLogger);
-                navigate2 = page.waitForResponse(
-                        response -> response.url().contains("t/suggest/finde/jsonv2")
-                                && response.url().contains("query=" + strippedIsin),
-                        () -> {
-                            inputElement.click();
-                            inputElement.pressSequentially(strippedIsin, new PressSequentiallyOptions().setDelay(100L));
-                            inputElement.blur();
-                        });
-            } catch (PlaywrightException pe) {
-                var so = new ScreenshotOptions();
-                so.setPath(Paths.get("/tmp/" + strippedIsin + "_waiting_jsonv2.png"));
-                page.screenshot(so);
-
-                LOG.error("Problem finding request jsonv2, see: [{}]", so.path, pe);
-
-                return Optional.empty();
-            } finally {
-                page.offResponse(responseLogger);
-            }
-
-            if (navigate2.status() != 200) {
-                LOG.info("Cannot retrieve finde/jsonv2 [{}], status = {}", scrapeUri, navigate.status());
-                return Optional.empty();
-            }
-
-            String jsonResponse = navigate2.text();
+            // type something into the search field and get a response.
+            String jsonResponse = getSearchJsonResponse(page, strippedIsin, scrapeUri);
 
             // Parse the JSON response
             var jsonReader = Json.createReader(new StringReader(jsonResponse));
             var rootObject = jsonReader.readObject();
 
             if (!rootObject.containsKey("it")) {
-                return Optional.empty();
+                throw new IllegalStateException("Page  [" + scrapeUri + "] does not contain 'it': " + rootObject);
             }
 
             JsonArray it = rootObject.getJsonArray("it");
@@ -268,7 +231,9 @@ public class FinanzenNetScraper {
                         }
 
                         if (aktienJson.getString("isin").equals(strippedIsin)) {
-                            return Optional.of(URI.create(aktienJson.getString("u")));
+                            String uri = aktienJson.getString("u");
+                            LOG.info("found uri {} for isin {} in result: {}", uri, strippedIsin, aktienJson);
+                            return Optional.of(URI.create(uri));
                         }
                     }
                     break;
@@ -277,6 +242,73 @@ public class FinanzenNetScraper {
 
             return Optional.empty();
         }
+    }
+
+    private static String getSearchJsonResponse(Page page, String strippedIsin, URI scrapeUri) {
+        Locator inputElement = page.locator("input#suggest-search-desktop-input");
+
+        if (inputElement == null || inputElement.all().isEmpty()) {
+            LOG.warn("could not find search box");
+            var so = new ScreenshotOptions();
+            so.setPath(Paths.get("/tmp/" + strippedIsin + "_searchbox.png"));
+            page.screenshot(so);
+
+            throw new IllegalStateException("could not find search box on " + scrapeUri + ". See " + so.path);
+        }
+
+        inputElement.waitFor(new WaitForOptions().setTimeout(1_000L).setState(WaitForSelectorState.VISIBLE));
+
+        Response navigate2;
+        Consumer<Response> responseLogger = createResponseLogger("WaitForSuggestFindeJsonV2");
+
+        try {
+            // try to click away the google popup
+            for (Frame frame : page.frames()) {
+                Locator locator = frame.locator("div#close");
+                if (locator == null || !locator.isVisible()) {
+                    continue;
+                }
+
+                frame.click("div#close");
+            }
+
+            Locator inputElementReloaded = page.locator("input#suggest-search-desktop-input");
+            inputElementReloaded.waitFor(
+                    new WaitForOptions().setTimeout(1_000L).setState(WaitForSelectorState.VISIBLE));
+
+            page.onResponse(responseLogger);
+            navigate2 = page.waitForResponse(
+                    response -> response.url().contains("t/suggest/finde/jsonv2")
+                            && response.url().contains("query=" + strippedIsin),
+                    () -> {
+                        inputElementReloaded.click(
+                                new ClickOptions().setDelay(10L).setTimeout(1_000L));
+                        page.locator("div.suggest-search__headline")
+                                .waitFor(
+                                        new WaitForOptions().setTimeout(5_000L).setState(WaitForSelectorState.VISIBLE));
+                        inputElementReloaded.pressSequentially(
+                                strippedIsin, new PressSequentiallyOptions().setDelay(100L));
+                        inputElementReloaded.blur();
+                    });
+        } catch (PlaywrightException pe) {
+            var so = new ScreenshotOptions();
+            so.setPath(Paths.get("/tmp/" + strippedIsin + "_waiting_jsonv2.png"));
+            page.screenshot(so);
+
+            LOG.error("Problem finding request jsonv2, see: [{}]", so.path, pe);
+
+            throw new IllegalStateException("Problem finding request jsonv2, see " + so.path);
+        } finally {
+            page.offResponse(responseLogger);
+        }
+
+        if (navigate2.status() != 200) {
+            LOG.info("Cannot retrieve finde/jsonv2 [{}], status = {}", scrapeUri, navigate2.status());
+            throw new IllegalStateException(
+                    "Cannot retrieve finde/jsonv2 [" + scrapeUri + "], status = " + navigate2.status() + ".");
+        }
+
+        return navigate2.text();
     }
 
     private static Consumer<Response> createResponseLogger(String id) {
@@ -288,15 +320,24 @@ public class FinanzenNetScraper {
         };
     }
 
-    private void ensureCookiesAccepted() {
+    private @Nullable Throwable ensureCookiesAccepted() {
         if (cookiesAccepted) {
-            return;
+            return null;
         }
 
         try (Page page = browserContext.newPage()) {
-            Response navigate = page.navigate("https://www.finanzen.net/");
-            if (navigate.status() != 200) {
-                LOG.error("could not open finanzen.net");
+            var navigateOptions = new NavigateOptions();
+            navigateOptions.setTimeout(10_000L).setWaitUntil(WaitUntilState.DOMCONTENTLOADED);
+            try {
+                Response navigate = page.navigate("https://www.finanzen.net/", navigateOptions);
+
+                if (navigate.status() != 200) {
+                    LOG.error("could not open finanzen.net");
+                }
+
+            } catch (TimeoutError timeoutError) {
+                page.screenshot(new ScreenshotOptions().setPath(Paths.get("/tmp/finanzen.net_cookie_timeout.png")));
+                throw timeoutError;
             }
 
             boolean buttonClicked = clickFinanzenNetCookieAcceptIfExists(page);
@@ -304,6 +345,12 @@ public class FinanzenNetScraper {
             if (buttonClicked) {
                 cookiesAccepted = true;
             }
+
+            return null;
+        } catch (PlaywrightException pe) {
+            LOG.error("could not open finanzen.net", pe);
+
+            return pe;
         }
     }
 

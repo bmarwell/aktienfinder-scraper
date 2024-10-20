@@ -18,7 +18,7 @@ package de.bmarwell.aktienfinder.scraper.value;
 import java.util.Objects;
 import java.util.Optional;
 
-public record Stock(String name, String isin, Optional<String> index) {
+public record Stock(String name, Isin isin, Optional<String> index) {
 
     @Override
     public boolean equals(Object o) {

@@ -37,7 +37,7 @@ public class StockBaseData {
     private String name;
 
     @Column(name = "last_update_run")
-    private @Nullable Instant lastUpdateRun;
+    private Instant lastUpdateRun;
 
     @Column(name = "last_successful_run")
     private @Nullable Instant lastSuccessfulRun;
@@ -58,6 +58,7 @@ public class StockBaseData {
     public StockBaseData(Isin isin, String name) {
         this.isin = isin;
         this.name = name;
+        this.lastUpdateRun = Instant.EPOCH;
     }
 
     public StockBaseData(Isin isin, String name, @Nullable Instant lastUpdateRun) {

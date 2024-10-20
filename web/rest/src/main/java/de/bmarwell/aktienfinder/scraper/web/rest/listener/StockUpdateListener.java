@@ -59,7 +59,7 @@ public class StockUpdateListener implements ServletContextListener {
         var isinUpdateRepository1 = this.isinUpdateRepository;
         var resultRepository = this.scrapingResultRepository;
         this.executor.scheduleAtFixedRate(
-                () -> updateOldestEntry(isinUpdateRepository1, resultRepository), 5L, 60L, TimeUnit.SECONDS);
+                () -> updateOldestEntry(isinUpdateRepository1, resultRepository), 5L, 20L, TimeUnit.SECONDS);
     }
 
     private void updateOldestEntry(IsinUpdateRepository baseRepo, ScrapingResultRepository resultRepository) {
@@ -82,8 +82,7 @@ public class StockUpdateListener implements ServletContextListener {
             log.info("Updating oldest entry {}", stockBaseData.getIsin());
 
             try (ScrapeService scrapeService = new ScrapeService()) {
-                var stock = new Stock(
-                        stockBaseData.getName(), stockBaseData.getIsin().toString(), Optional.empty());
+                var stock = new Stock(stockBaseData.getName(), stockBaseData.getIsin(), Optional.empty());
                 StockScrapingResult scrapingResult = scrapeService.scrape(stock);
 
                 if (!scrapingResult.isSuccessful()) {

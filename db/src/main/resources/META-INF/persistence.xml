@@ -6,6 +6,11 @@
 
     <properties>
       <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" />
+
+      <property name="eclipselink.logging.logger" value="ServerLogger"/>
+      <property name="eclipselink.logging.level" value="finer"/>
+      <property name="eclipselink.logging.level.sql" value="off"/>
+      <property name="eclipselink.logging.parameters" value="true"/>
     </properties>
   </persistence-unit>
 </persistence>

@@ -16,6 +16,7 @@
 package de.bmarwell.aktienfinder.scraper.db.dto;
 
 import de.bmarwell.aktienfinder.scraper.db.converter.IsinConverter;
+import de.bmarwell.aktienfinder.scraper.value.Isin;
 import jakarta.persistence.Basic;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -30,7 +31,7 @@ public class ScrapingResult {
     @Id
     @Basic
     @Convert(converter = IsinConverter.class)
-    private String isin;
+    private Isin isin;
 
     @Column(name = "name")
     private String name;
@@ -62,7 +63,7 @@ public class ScrapingResult {
     }
 
     public ScrapingResult(
-            String isin,
+            Isin isin,
             String name,
             @Nullable Double bilanzierterGewinn,
             @Nullable Double bereinigterGewinn,
@@ -91,11 +92,11 @@ public class ScrapingResult {
         this.beta = beta;
     }
 
-    public String getIsin() {
+    public Isin getIsin() {
         return isin;
     }
 
-    public void setIsin(String isin) {
+    public void setIsin(Isin isin) {
         this.isin = isin;
     }
 

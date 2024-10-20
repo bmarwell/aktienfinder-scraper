@@ -27,6 +27,7 @@ import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Response;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import de.bmarwell.aktienfinder.scraper.library.scrape.DomHelper;
+import de.bmarwell.aktienfinder.scraper.value.Isin;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
 import java.net.URI;
 import java.util.ArrayList;
@@ -176,7 +177,7 @@ public abstract class AbstractWallstreetOnlineDeScraper extends AbstractPaginata
                 continue;
             }
 
-            Stock stock = new Stock(stockName, isin, Optional.of(getName()));
+            Stock stock = new Stock(stockName, Isin.fromString(isin), Optional.of(getName()));
             LOG.debug("Found stock [{}] on page [{}].", stock, pageNumber);
             stocks.add(stock);
             stockPage.close();

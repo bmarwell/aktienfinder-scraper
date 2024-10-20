@@ -30,6 +30,7 @@ import de.bmarwell.aktienfinder.scraper.library.caching.PoorMansCache.Instance;
 import de.bmarwell.aktienfinder.scraper.value.AktienfinderStock;
 import de.bmarwell.aktienfinder.scraper.value.Anlagestrategie;
 import de.bmarwell.aktienfinder.scraper.value.FinanzenNetRisiko;
+import de.bmarwell.aktienfinder.scraper.value.Isin;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
 import de.bmarwell.aktienfinder.scraper.value.StockBewertung;
 import de.bmarwell.aktienfinder.scraper.value.StockFazit;
@@ -48,7 +49,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -126,13 +126,7 @@ public class ScrapeService implements AutoCloseable {
      * @return An {@code Optional<AktienfinderStock>} containing detailed information about the stock if available; otherwise {@code Optional.empty()}.
      */
     public StockScrapingResult scrape(Stock inStock) {
-        Optional<URI> scrapeUrl = getCanonicalDataUrl(inStock);
-
-        if (scrapeUrl.isEmpty()) {
-            return new StockScrapingResult(null, new IllegalStateException("no canonical data url found."));
-        }
-
-        var canonicalDataUrl = scrapeUrl.orElseThrow();
+        URI canonicalDataUrl = getCanonicalDataUrl(inStock);
 
         var xhrResponses = new HashMap<String, String>();
         xhrResponses.put(BEWERTUNG, "unbewertet");
@@ -143,7 +137,7 @@ public class ScrapeService implements AutoCloseable {
         Throwable lastException = null;
 
         try (Instance<Playwright> playwrightInstance = this.browserCache.getBlocking()) {
-            try (Browser browser = playwrightInstance.instance().chromium().launch();
+            try (Browser browser = playwrightInstance.instance().firefox().launch();
                     BrowserContext browserContext = browser.newContext(contextOptions())) {
 
                 AktienfinderScraper aktienfinderScraper = new AktienfinderScraper(browserContext);
@@ -175,7 +169,11 @@ public class ScrapeService implements AutoCloseable {
         if (xhrResponses.get("StockProfile") == null) {
             LOG.warn("empty StockProfile for stock [{} - ISIN: {}]", inStock.name(), inStock.isin());
 
-            return new StockScrapingResult(null, lastException);
+            if (lastException != null) {
+                return new StockScrapingResult(null, lastException);
+            }
+
+            return new StockScrapingResult(null, new IllegalStateException("no exception and no stock profile"));
         }
 
         // now read
@@ -184,7 +182,8 @@ public class ScrapeService implements AutoCloseable {
         var stockDataReader = Json.createReader(stockProfile);
         var stockData = stockDataReader.readObject();
 
-        var stock = new Stock(stockData.getString("Name"), stockData.getString("Isin"), inStock.index());
+        var stock =
+                new Stock(stockData.getString("Name"), Isin.fromString(stockData.getString("Isin")), inStock.index());
         double bilGewinn = -1;
         double bereinigterGewinn = -1;
         double operativerCashFlow = -1;
@@ -266,9 +265,9 @@ public class ScrapeService implements AutoCloseable {
                         : (short) -1);
     }
 
-    private Optional<URI> getCanonicalDataUrl(Stock stock) {
+    private URI getCanonicalDataUrl(Stock stock) {
         var searchUri = URI.create("https://dividendenfinder.de/api/StockProfile/List/"
-                + stock.isin().strip());
+                + stock.isin().value().strip());
 
         try (Instance<Playwright> playwright = this.browserCache.getBlocking()) {
             try (Browser browser = playwright.instance().chromium().launch();
@@ -291,7 +290,8 @@ public class ScrapeService implements AutoCloseable {
                             navResponse.status(),
                             errorBody);
 
-                    return Optional.empty();
+                    throw new IllegalStateException("Response code of URL " + searchUri + " was " + navResponse.status()
+                            + ", with " + "response body: [[[" + errorBody + "]]]");
                 }
 
                 // [{"Name":"NVIDIA","Isin":"US67066G1040","Symbol":"NVDA"}]
@@ -301,25 +301,29 @@ public class ScrapeService implements AutoCloseable {
                 var resultItem = jsonReader.readObject().asJsonObject();
                 var resultIsin = resultItem.getString("Isin");
 
-                if (stock.isin().equals(resultIsin)) {
-                    var securityName = resultItem.getString("Name");
-                    String urlSafeStockName = URLEncoder.encode(securityName, StandardCharsets.UTF_8)
-                            .replaceAll("\\+", "%20");
-                    var uri = URI.create("https://aktienfinder.net/aktien-profil/" + urlSafeStockName + "-Aktie");
-
-                    return Optional.of(uri);
+                if (!stock.isin().value().equals(resultIsin)) {
+                    throw new IllegalStateException("Retrieved ISIN [" + resultIsin + "] does not match expected ["
+                            + stock.isin().value() + "]");
                 }
+
+                var securityName = resultItem.getString("Name");
+                String urlSafeStockName =
+                        URLEncoder.encode(securityName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+
+                return URI.create("https://aktienfinder.net/aktien-profil/" + urlSafeStockName + "-Aktie");
             }
-        } catch (Exception httpEx) {
+        } catch (RuntimeException httpEx) {
             LOG.error(
                     "unable to retrieve aktien name for ISIN [{}], URL=[{}], unknown error.",
                     stock.isin(),
                     searchUri,
                     httpEx);
-            return Optional.empty();
+            throw httpEx;
+        } catch (TimeoutException | InterruptedException inEx) {
+            throw new IllegalStateException("Interrupted or timeout while getting URL ", inEx);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unknown Exception while trying to get instance of playwright ", e);
         }
-
-        return Optional.empty();
     }
 
     @Override

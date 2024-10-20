@@ -29,6 +29,10 @@ public record Isin(String value) {
         this.validate();
     }
 
+    public static Isin fromString(String isin) {
+        return new Isin(isin);
+    }
+
     /**
      * Validates the ISIN.
      *

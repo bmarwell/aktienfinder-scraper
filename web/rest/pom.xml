@@ -14,6 +14,10 @@
     <artifactId>aktienfinder.scraper-web-rest</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>aktienfinder-scraper :: web :: rest</name>
+    <properties>
+        <wlp.user.dir>${project.build.directory}/wlp-usr</wlp.user.dir>
+        <playwright.driver.dir>${wlp.user.dir}/shared/resources/playwright</playwright.driver.dir>
+    </properties>
     <packaging>war</packaging>
 
     <dependencies>
@@ -59,6 +63,14 @@
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.microprofile.openapi</groupId>
+            <artifactId>microprofile-openapi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.json.bind</groupId>
+            <artifactId>jakarta.json.bind-api</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>com.h2database</groupId>
@@ -84,7 +96,7 @@
                             <excludeDefaultDirectories>true</excludeDefaultDirectories>
                             <filesets>
                                 <fileset>
-                                    <directory>${project.build.directory}/wlp-usr/servers</directory>
+                                    <directory>${wlp.user.dir}/servers</directory>
                                 </fileset>
                             </filesets>
                         </configuration>
@@ -116,18 +128,44 @@
                                     <artifactId>h2</artifactId>
                                 </dependency>
                             </artifactItems>
-                            <outputDirectory>${project.build.directory}/wlp-usr/shared/resources/h2</outputDirectory>
+                            <outputDirectory>${wlp.user.dir}/shared/resources/h2</outputDirectory>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
 
             <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-sources</id>
+                        <phase>generate-sources</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${playwright.driver.dir}"/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+
+            <plugin>
                 <groupId>io.openliberty.tools</groupId>
                 <artifactId>liberty-maven-plugin</artifactId>
                 <configuration>
-                    <userDirectory>${project.build.directory}/wlp-usr</userDirectory>
+                    <!-- MS Playwright does not know about wsjar paths. -->
+                    <appsDirectory>apps</appsDirectory>
+                    <looseApplication>false</looseApplication>
+                    <stripVersion>true</stripVersion>
+                    <userDirectory>${wlp.user.dir}</userDirectory>
                     <outputDirectory>${project.build.directory}/wlp-out</outputDirectory>
+                    <jvmOptions>
+                        <playwright.driver.tmpdir>-Dplaywright.driver.tmpdir=${playwright.driver.dir}</playwright.driver.tmpdir>
+                    </jvmOptions>
                 </configuration>
             </plugin>
         </plugins>

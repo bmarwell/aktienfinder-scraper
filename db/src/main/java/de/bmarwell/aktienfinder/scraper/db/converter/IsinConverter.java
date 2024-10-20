@@ -19,7 +19,7 @@ import de.bmarwell.aktienfinder.scraper.value.Isin;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 
-@Converter
+@Converter(autoApply = true)
 public class IsinConverter implements AttributeConverter<Isin, String> {
 
     @Override

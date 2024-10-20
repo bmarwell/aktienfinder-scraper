@@ -23,6 +23,7 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import de.bmarwell.aktienfinder.scraper.library.download.StockIndexStockRetriever;
 import de.bmarwell.aktienfinder.scraper.library.scrape.DomHelper;
+import de.bmarwell.aktienfinder.scraper.value.Isin;
 import de.bmarwell.aktienfinder.scraper.value.Stock;
 import java.net.URI;
 import java.util.ArrayList;
@@ -92,7 +93,7 @@ public abstract class AbstractBoerseFrankfurtScraper implements StockIndexStockR
 
             String isin = matcher.group(1);
 
-            stocks.add(new Stock(stockName, isin, Optional.of(getName())));
+            stocks.add(new Stock(stockName, Isin.fromString(isin), Optional.of(getName())));
         }
     }
 }

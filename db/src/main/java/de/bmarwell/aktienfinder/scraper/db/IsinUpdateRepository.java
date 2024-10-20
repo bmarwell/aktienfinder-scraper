@@ -17,13 +17,18 @@ package de.bmarwell.aktienfinder.scraper.db;
 
 import de.bmarwell.aktienfinder.scraper.db.dto.StockBaseData;
 import de.bmarwell.aktienfinder.scraper.value.Isin;
+import java.io.Serializable;
 import java.util.Optional;
 
-public interface IsinUpdateRepository {
+public interface IsinUpdateRepository extends Serializable {
 
     Optional<StockBaseData> getOldestUpdatedEntry();
 
     void setUpdatedNowSuccessful(Isin isin, String name);
 
     void setUpdatedNowWithError(Isin isin, Throwable throwable);
+
+    StockBaseData addStock(Isin isin, String name);
+
+    Optional<StockBaseData> getLatestError();
 }
